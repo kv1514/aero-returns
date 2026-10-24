@@ -13,8 +13,8 @@ OWNER="${SUDO_USER:-}"
 [ -n "$OWNER" ] && [ "$OWNER" != root ] || { echo "run as 'sudo bash $0' from the normal user account"; exit 1; }
 REPO="$(cd .. && pwd)"
 
-python3 -c 'import pymavlink' 2>/dev/null || {
-    echo "pymavlink is missing for the system python3 (apt install python3-pymavlink, or pip3 install pymavlink)"; exit 1; }
+sudo -u "$OWNER" python3 -c 'import pymavlink' 2>/dev/null || {
+    echo "pymavlink is missing for ${OWNER}'s python3 (the service runs as ${OWNER}: pip3 install --user pymavlink, or apt install python3-pymavlink)"; exit 1; }
 
 echo "== /etc/aero/bridge.env"
 install -d -m 755 /etc/aero
