@@ -2,9 +2,10 @@
 import { env } from 'cloudflare:workers';
 import { z } from 'zod';
 import { session } from './session';
+import { sessionFailure } from './http';
 import { deriveDroneKey, formatCommand, lineDroneId, parseDroneBody, signLine, verifyLine, type Ack, type CommandType, type DroneMessage } from './drone-protocol';
-import { ARM_WINDOW_MS, ENDED, EXPIRY_S, GROUND_PHASES, LIMITS, STALE_MS, ackOutcome, airborne, configProblem, customerAction, dispatchBlockers, enterPhase, isStale, operatorAction, phaseCommand, startLive, type Drone, type DroneConfig, type PlannedCommand } from './drone-mission';
-import type { LiveTelemetry, MissionPhase, Point, ReturnRecord } from './simulation';
+import { ARM_WINDOW_MS, ENDED, EXPIRY_S, GROUND_PHASES, LIMITS, STALE_MS, ackOutcome, airborne, configProblem, customerAction, dispatchBlockers, droneGoneError, enterPhase, fleetInputError, isStale, groundChange, operatorAction, phaseCommand, pickupFor, pickupMismatch, settledFinal, startLive, type Drone, type DroneConfig, type PlannedCommand } from './drone-mission';
+import type { LiveFlight, LiveTelemetry, MissionPhase, Point, ReturnRecord } from './simulation';
 
 type DroneRow = { id: string; owner: string; name: string; transport: string; phone: string | null; phone_verified: number; key_version: number; config: string; armed_until: number; active_return: string | null; last_seq: number; cmd_seq: number; last_seen: number; telemetry: string | null; created_at: number };
 const toDrone = (r: DroneRow): Drone => ({ id: r.id, owner: r.owner, name: r.name, transport: r.transport === 'sms' ? 'sms' : 'https', phone: r.phone, phoneVerified: !!r.phone_verified, keyVersion: r.key_version, config: JSON.parse(r.config), armedUntil: r.armed_until, activeReturn: r.active_return, lastSeq: r.last_seq, lastSeen: r.last_seen, telemetry: r.telemetry ? JSON.parse(r.telemetry) : null, createdAt: r.created_at });
@@ -47,12 +48,16 @@ async function recentCommands(db: D1Database, droneId: string, now: number) {
   return (await db.prepare('SELECT COUNT(*) AS n FROM drone_commands WHERE drone_id = ? AND created_at > ?').bind(droneId, now - 60_000).first<{ n: number }>())?.n ?? 0;
 }
 
-type MissionMove = { fault?: string | null; command?: PlannedCommand | null; cancelled?: boolean; keepSeq?: boolean };
-/** Compare-and-set a mission phase on a return together with the phase's command. Returns null when another request won. */
+type MissionMove = { fault?: string | null; command?: PlannedCommand | null; cancelled?: boolean; keepSeq?: boolean; live?: Partial<LiveFlight> };
+/**
+ * Compare-and-set a mission phase on a return together with the phase's command. Returns null when another request won.
+ * `live` patches the flight first (a divert to the pad); an ending flight keeps the drone's last report as its final telemetry.
+ */
 async function moveMission(db: D1Database, drone: Drone, r: ReturnRecord, version: number, phase: MissionPhase, move: MissionMove, now: number) {
-  const command = move.command !== undefined ? move.command : phaseCommand(r.live!, phase);
-  const seq = command ? await allocSeq(db, drone.id) : move.keepSeq ? r.live!.cmdSeq : null;
-  const next = { ...enterPhase({ ...r, cancelled: r.cancelled || !!move.cancelled }, phase, now, seq, move.fault ?? null), version: version + 1 };
+  const live = { ...r.live!, ...move.live, ...(ENDED.includes(phase) && drone.telemetry ? { finalTelemetry: drone.telemetry } : {}) };
+  const command = move.command !== undefined ? move.command : phaseCommand(live, phase);
+  const seq = command ? await allocSeq(db, drone.id) : move.keepSeq ? live.cmdSeq : null;
+  const next = { ...enterPhase({ ...r, live, cancelled: r.cancelled || !!move.cancelled }, phase, now, seq, move.fault ?? null), version: version + 1 };
   const guard = { returnId: next.id, version: next.version };
   const statements = [db.prepare('UPDATE returns SET version = ?, record = ? WHERE id = ? AND owner = ? AND version = ?').bind(next.version, JSON.stringify(persistable(next)), next.id, drone.owner, version)];
   if (command) statements.push(...await commandStatements(db, drone, seq!, command, { returnId: next.id, phase }, now, guard));
@@ -100,8 +105,8 @@ async function ingest(db: D1Database, drone: Drone, messages: DroneMessage[], no
     } else { await applyAck(db, drone, m, now); acked = true; }
     lastSeq = Math.max(lastSeq, m.seq);
   }
-  const flying = airborne(telemetry) || airborne(drone.telemetry), changed = telemetry?.state !== drone.telemetry?.state;
-  // An idle drone on the ground writes at most every few seconds; flights and missions write every report.
+  const flying = airborne(telemetry) || airborne(drone.telemetry), changed = groundChange(drone.telemetry, telemetry);
+  // An idle drone on the ground writes at most every few seconds unless something dispatch or Pad = drone reads changed; flights and missions write every report.
   if (!telemetry || !(fresh || acked) || !(flying || drone.activeReturn || changed || acked || now - drone.lastSeen >= GROUND_WRITE_MS)) {
     if (lastSeq > drone.lastSeq && acked) await db.prepare('UPDATE drones SET last_seq = MAX(last_seq, ?) WHERE id = ?').bind(lastSeq, drone.id).run();
     return;
@@ -110,6 +115,18 @@ async function ingest(db: D1Database, drone: Drone, messages: DroneMessage[], no
   if (flying) rows.push(db.prepare('INSERT OR IGNORE INTO drone_telemetry (drone_id, seq, received_at, data) VALUES (?, ?, ?, ?)').bind(drone.id, lastSeq, now, JSON.stringify(telemetry)));
   if (Math.random() < .01) rows.push(db.prepare('DELETE FROM drone_telemetry WHERE drone_id = ? AND received_at < ?').bind(drone.id, now - 3 * 3600_000));
   await db.batch(rows);
+  if (fresh && airborne(drone.telemetry) && !airborne(telemetry)) await settleFinal(db, drone, telemetry);
+}
+/**
+ * On the drone's first ground report after flying, a flight of this drone that ended in the air takes that report as its
+ * final one (settledFinal). Only the flight that just ended, or the latest one while the drone has no other mission: a
+ * new dispatch needs the drone on the ground, so this landing belongs to it.
+ */
+async function settleFinal(db: D1Database, drone: Drone, t: LiveTelemetry) {
+  const row = await db.prepare("SELECT id, record, version FROM returns WHERE owner = ? AND json_extract(record, '$.live.droneId') = ? AND json_extract(record, '$.live.phase') IN ('COMPLETE', 'ABORTED') ORDER BY json_extract(record, '$.live.phaseAt') DESC LIMIT 1").bind(drone.owner, drone.id).first<{ id: string; record: string; version: number }>();
+  if (!row || (drone.activeReturn && drone.activeReturn !== row.id)) return;
+  const next = settledFinal(JSON.parse(row.record) as ReturnRecord, t);
+  if (next) await db.prepare('UPDATE returns SET version = ?, record = ? WHERE id = ? AND owner = ? AND version = ?').bind(row.version + 1, JSON.stringify(persistable({ ...next, version: row.version + 1 })), row.id, drone.owner, row.version).run();
 }
 /** Unaccepted commands past their expiry pause the mission so the operator can retry over a better link. */
 async function expireCommands(db: D1Database, drone: Drone, now: number) {
@@ -198,7 +215,8 @@ export async function attachLive(db: D1Database, owner: string, records: ReturnR
 const liveActionSchema = z.object({ action: z.string() });
 export async function liveReturnRequest(db: D1Database, owner: string, record: ReturnRecord, version: number, request: Request, now: number): Promise<{ status: number; body: unknown }> {
   const drone = await loadDrone(db, record.live!.droneId);
-  if (!drone || drone.owner !== owner) return { status: 200, body: { record, now } };
+  // The flight ended and its drone was removed: a read still shows the final record, but an action is refused, never a silent 200.
+  if (!drone || drone.owner !== owner) return request.method === 'GET' ? { status: 200, body: { record, now } } : { status: 409, body: { error: droneGoneError(record.live!) } };
   if (request.method === 'GET') {
     await expireCommands(db, drone, now);
     const current = drone.activeReturn === record.id ? (await missionReturn(db, drone))?.record ?? record : record;
@@ -216,16 +234,17 @@ export async function liveReturnRequest(db: D1Database, owner: string, record: R
   return { status: 200, body: { record: withTelemetry, now } };
 }
 
-const point = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
-const createSchema = z.object({ name: z.string().trim().min(1).max(40), transport: z.enum(['https', 'sms']), phone: z.string().regex(/^\+[1-9]\d{7,14}$/, 'Use an E.164 phone number like +15105550123.').optional(), home: point, pickupPad: point.nullable().default(null), dropPad: point.nullable().default(null), radius: z.number(), maxAlt: z.number(), cruiseAlt: z.number() });
+const point = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]), pinRadius = z.number().min(0).max(LIMITS.maxPinRadius);
+const createSchema = z.object({ name: z.string().trim().min(1).max(40), transport: z.enum(['https', 'sms']), phone: z.string().regex(/^\+[1-9]\d{7,14}$/, 'Use an E.164 phone number like +15105550123.').optional(), home: point, pickupPad: point.nullable().default(null), dropPad: point.nullable().default(null), radius: z.number(), maxAlt: z.number(), cruiseAlt: z.number(), pinRadius: pinRadius.optional() });
 const patchSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('arm'), checklist: z.object({ pilot: z.literal(true), airspace: z.literal(true), pads: z.literal(true), failsafe: z.literal(true) }) }),
   z.object({ action: z.literal('disarm') }),
-  z.object({ action: z.literal('config'), name: z.string().trim().min(1).max(40).optional(), home: point.optional(), pickupPad: point.nullable().optional(), dropPad: point.nullable().optional(), radius: z.number().optional(), maxAlt: z.number().optional(), cruiseAlt: z.number().optional() }),
+  z.object({ action: z.literal('config'), name: z.string().trim().min(1).max(40).optional(), home: point.optional(), pickupPad: point.nullable().optional(), dropPad: point.nullable().optional(), radius: z.number().optional(), maxAlt: z.number().optional(), cruiseAlt: z.number().optional(), pinRadius: pinRadius.optional() }),
   z.object({ action: z.literal('pad-from-drone'), pad: z.enum(['home', 'pickupPad', 'dropPad']) }),
   z.object({ action: z.literal('command'), type: z.enum(['PING', 'HOLD', 'LAND', 'RTL', 'ABORT']) }),
-  z.object({ action: z.literal('dispatch'), returnId: z.string().uuid() }),
-  z.object({ action: z.enum(['launch', 'unload', 'retry']) }),
+  // pickup: what the operator saw in Fleet's preview; the server flies there only if it still computes the same.
+  z.object({ action: z.literal('dispatch'), returnId: z.string().uuid(), pickup: z.object({ source: z.enum(['pin', 'pad']), point }).optional() }),
+  z.object({ action: z.enum(['launch', 'unload', 'retry', 'land', 'divert-pad']) }),
   z.object({ action: z.literal('abort') }),
   z.object({ action: z.literal('rotate-key') }),
 ]);
@@ -235,7 +254,7 @@ const newDroneId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b
 /** Owner-scoped Fleet console API. */
 export async function handleFleet(request: Request, id?: string): Promise<Response> {
   let identity: Awaited<ReturnType<typeof session>>;
-  try { identity = await session(request); } catch { return Response.json({ error: 'Your account session expired. Open Your account to sign in again.' }, { status: 401, headers: { 'Cache-Control': 'private, no-store' } }); }
+  try { identity = await session(request); } catch { return sessionFailure(request); }
   const { owner, cookie } = identity;
   const reply = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', ...(cookie ? { 'Set-Cookie': cookie } : {}) } });
   const db = env.DB; if (!db) return reply({ error: 'Storage is unavailable.' }, 503);
@@ -255,7 +274,7 @@ export async function handleFleet(request: Request, id?: string): Promise<Respon
       if (!secret()) return reply({ error: 'Set the DRONE_LINK_SECRET Worker secret before registering drones.' }, 503);
       const input = createSchema.parse(JSON.parse(await request.text()));
       if (input.transport === 'sms' && !input.phone) return reply({ error: 'SMS drones need the phone number of their SIM.' }, 400);
-      const config: DroneConfig = { home: input.home as Point, pickupPad: input.pickupPad as Point | null, dropPad: input.dropPad as Point | null, radius: input.radius, maxAlt: input.maxAlt, cruiseAlt: input.cruiseAlt };
+      const config: DroneConfig = { home: input.home as Point, pickupPad: input.pickupPad as Point | null, dropPad: input.dropPad as Point | null, radius: input.radius, maxAlt: input.maxAlt, cruiseAlt: input.cruiseAlt, pinRadius: input.pinRadius ?? 0 };
       const problem = configProblem(config); if (problem) return reply({ error: problem }, 400);
       const count = await db.prepare('SELECT COUNT(*) AS n FROM drones WHERE owner = ?').bind(owner).first<{ n: number }>();
       if ((count?.n || 0) >= LIMITS.maxDrones) return reply({ error: `You can register up to ${LIMITS.maxDrones} drones.` }, 429);
@@ -309,6 +328,8 @@ export async function handleFleet(request: Request, id?: string): Promise<Respon
         if (!row) throw new Error('Choose one of your own returns.');
         const record = JSON.parse(row.record) as ReturnRecord, blockers = dispatchBlockers(drone, record, now);
         if (blockers.length) return reply({ error: blockers.join(' '), blockers }, 400);
+        const changed = pickupMismatch(pickupFor(drone.config, record.package.pickup), input.pickup as { source: 'pin' | 'pad'; point: Point } | undefined);
+        if (changed) return reply({ error: changed }, 409);
         const claimed = await db.prepare('UPDATE drones SET active_return = ? WHERE id = ? AND active_return IS NULL').bind(record.id, id).run();
         if (claimed.meta.changes === 0) return reply({ error: 'The drone is already flying another return.' }, 409);
         const release = () => db.prepare('UPDATE drones SET active_return = NULL WHERE id = ? AND active_return = ?').bind(id, record.id).run();
@@ -319,7 +340,8 @@ export async function handleFleet(request: Request, id?: string): Promise<Respon
       } else if (input.action === 'rotate-key') {
         needsLink(); if (mission) throw new Error('Rotate the key after the live flight ends.');
         if (airborne(drone.telemetry)) throw new Error('Land the drone before rotating its key; the old key stops working immediately.');
-        await db.prepare('UPDATE drones SET key_version = key_version + 1, last_seq = 0 WHERE id = ?').bind(id).run();
+        // Queued lines are signed with the old key, which the bridge can no longer verify: retire them with it.
+        await db.batch([db.prepare('UPDATE drones SET key_version = key_version + 1, last_seq = 0 WHERE id = ?').bind(id), db.prepare("UPDATE drone_commands SET status = 'superseded', updated_at = ? WHERE drone_id = ? AND status IN ('pending', 'sent')").bind(now, id)]);
         key = await keyFor((await loadDrone(db, id))!);
       } else {
         needsLink(); if (!mission?.record.live) throw new Error('This drone has no live flight.');
@@ -328,7 +350,7 @@ export async function handleFleet(request: Request, id?: string): Promise<Respon
           if (drone.armedUntil <= now) throw new Error('Arm live missions again with the pre-flight checklist.');
           if (isStale(drone, now)) throw new Error('No fresh telemetry from the bridge.');
         }
-        await stepMission(db, drone, r => operatorAction(r, action), now);
+        await stepMission(db, drone, r => operatorAction(r, action, drone!.config.pickupPad, drone!.telemetry), now);
       }
       drone = (await loadDrone(db, id))!;
     }
@@ -339,7 +361,7 @@ export async function handleFleet(request: Request, id?: string): Promise<Respon
     const mission = drone.activeReturn ? await missionReturn(db, drone) : null;
     return reply({ setup, drone: publicDrone(drone, now), ...(key ? { key } : {}), trail: trail.results.map(t => JSON.parse(t.data) as LiveTelemetry).reverse(), commands: commands.results, mission: mission?.record ?? null, now });
   } catch (error) {
-    if (error instanceof z.ZodError) return reply({ error: error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(' · ') }, 400);
+    if (error instanceof z.ZodError) return reply({ error: fleetInputError(error.issues) }, 400);
     if (error instanceof SyntaxError) return reply({ error: 'Invalid request.' }, 400);
     if (error instanceof Error && !/D1|SQLITE|network/i.test(error.message)) return reply({ error: error.message }, 400);
     console.error('AERO fleet operation failed', error);

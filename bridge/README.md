@@ -26,15 +26,15 @@ export AERO_DRONE_KEY=<64 hex characters>   # the bridge never prints it
 ## Quick start: fake vehicle against a deployed app
 
 ```sh
-python3 bridge/aero_bridge.py --vehicle fake --transport https \
-  --server https://<your-aero-app> --fake-home 37.871900,-122.258500
+python3 bridge/aero_bridge.py --transport https --server https://<your-aero-app> --vehicle fake --fake-home 37.871900,-122.258500 \
+  --fence-center 37.871900,-122.258500 --fence-radius 300 --max-alt 60 --cruise-alt 30
 ```
 
-`--fake-home` must be the home pad you entered in Fleet; the server checks that the drone is inside its geofence. The fake drone cruises at 10 m/s, climbs at 2 m/s, descends at 1.5 m/s, drains its battery while flying, and lands with an automatic disarm. The fake vehicle always flies, so `--live` is not needed. Arm the drone in Fleet, dispatch a return, and watch the bridge log, which prints one line per event. Press Ctrl-C to stop.
+Copy this line from Fleet's **Connect the bridge** card ("Test first with the built-in simulator"): it fills in the drone's own home, geofence radius, maximum altitude and cruise altitude. `--fake-home` and `--fence-center` must be the home pad you entered in Fleet; the server checks that the drone is inside its geofence. Without the limits the fake vehicle's fence is 2000 m and its altitude cap 60 m, so a drone set to cruise above 60 m would get `REJECTED ALTITUDE`. The fake drone cruises at 10 m/s, climbs at 2 m/s, descends at 1.5 m/s, drains its battery while flying, and lands with an automatic disarm. The fake vehicle always flies, so `--live` is not needed. Arm the drone in Fleet, dispatch a return, and watch the bridge log, which prints one line per event. The fake drone flies to the pickup pad, or to the customer's map pin when the drone has a pin zone in Fleet and the pin is inside it. At a pin it hovers until you tap **Landing area clear · land** in Fleet. Press Ctrl-C to stop.
 
 ## Simulators (SITL)
 
-SITL is a simulator, so passing `--live` is safe here. Start SITL at your Fleet home, or move the Fleet home to the SITL location, so the geofence checks pass.
+SITL is a simulator, so passing `--live` is safe here. Start SITL at your Fleet home, or move the Fleet home to the SITL location, so the geofence checks pass. The fence values below are examples: use the drone's own `--fence-radius`, `--max-alt` and `--cruise-alt`, which Fleet's **Connect the bridge** card prints in its PX4 / ArduPilot line.
 
 **PX4** (Gazebo). PX4 sends its API link to UDP port 14540:
 
@@ -113,6 +113,7 @@ Failure reasons include `MODE_CHANGED` (the RC pilot or an autopilot failsafe sw
 Other behavior:
 
 - **Server link loss.** If the server is unreachable for `--link-timeout` seconds (default 20) while airborne, the bridge holds position. After another `--link-timeout` it returns to launch. Over SMS, "unreachable" only means that the modem cannot send or is off the network (see Link loss over SMS above). The bridge acts only while the vehicle is in the flight mode of its own last command, which includes hovering after a step is DONE. Once the RC pilot or an autopilot failsafe selects another mode, or the vehicle disarms, the bridge leaves that flight alone until its next command, even if the pilot later switches through one of the bridge's modes. It also does not intervene during LAND, RTL or ABORT.
+- **Hovering over a customer's pin.** After the GOTO to a pin is DONE, the vehicle holds there at cruise altitude in that GOTO's mode (`GUIDED` on ArduPilot, `AUTO.LOITER` on PX4) and the bridge waits: the server sends LAND only when the operator taps **Landing area clear · land**, or a GOTO to the pickup pad if the operator diverts. Meanwhile the link-loss HOLD and RTL above still apply, an RC mode change hands the flight to the pilot, and a battery below `--battery-floor` is only logged, so the autopilot's battery failsafe is what brings it down. None of these sends an ack; Fleet reads the drone's reported position instead. If the drone is on the ground at the pin, the operator's confirmation sends a LAND, which on the ground at most disarms it.
 - **Home position.** PX4 and ArduPilot move home to wherever the drone arms. When the drone re-arms at a pickup or drop pad, the bridge sets home back to the home pad with `DO_SET_HOME`, so RTL, including the autopilot's own failsafe RTL, flies home rather than staying at the customer's pad. If the autopilot refuses `DO_SET_HOME` or never acknowledges it, or the home altitude is unknown, the bridge disarms and fails the takeoff with `FAILED HOME_NOT_SET`. On PX4, the takeoff altitude is computed from the home that PX4 sets at arming, the same reference as the relative altitude that decides DONE.
 - **Takeoff command.** The bridge does not blindly repeat `NAV_TAKEOFF`, because a repeat that reaches a climbing ArduCopter is refused. When the ack is lost or a repeat is refused, the bridge looks at the vehicle: armed and climbing in the takeoff mode counts as the takeoff in progress. It sends the command once more only when fresh telemetry shows the vehicle still on the ground.
 - **Restarts.** Acks the server has not received yet are kept in `--state-file` and re-sent after a restart, signed again with a fresh `seq` and timestamp. A command that was running when the bridge stopped is acked `FAILED BRIDGE_RESTART`.
@@ -134,7 +135,7 @@ Set the autopilot's geofence to match `--fence-radius` and `--max-alt`. Make the
 ## Pre-flight checklist
 
 1. Fly the same mission in SITL with the same bridge flags.
-2. Make sure the Fleet home, `--fence-center` and the physical home pad agree. Match the fence radius and maximum altitude in the bridge, the app and the autopilot.
+2. Make sure the Fleet home, `--fence-center` and the physical home pad agree, and that `--fence-radius` and `--max-alt` are exactly Fleet's geofence radius and maximum altitude (Fleet's bridge command lines fill them in), with the autopilot's fence set to match. Pins are off unless you set a pin zone in Fleet ("Land at customer pins within … m of the pickup pad", 0–100 m). With a zone, survey the whole circle around the pickup pad: a customer's pin inside it, and at least 15 m inside the geofence, becomes the pickup. The drone then hovers over the pin at cruise altitude and lands only when you tap **Landing area clear · land**. Fleet shows which pickup a return will use before you dispatch it. If Fleet has no pin-zone field, the app predates pins and every pickup uses the pickup pad.
 3. With the propellers off, check the failsafes: stop the bridge while armed and confirm that the GCS failsafe triggers.
 4. Confirm the RC transmitter is on and the pilot is ready. Test that switching flight modes on the RC takes control; the bridge then logs `MODE_CHANGED` and stops commanding.
 5. Check the GPS has a 3D fix and at least 6 satellites, the battery is at or above 40% (the server's dispatch minimum), and the compass is calibrated.

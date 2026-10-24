@@ -1,6 +1,6 @@
 # AERO drone link v1
 
-AERO can fly a return with a real PX4 or ArduPilot drone outdoors. The web app never talks MAVLink. A **bridge** runs on the drone's companion computer (or a laptop wired to the flight controller), exchanges short signed text lines with the app, and translates them into MAVLink.
+AERO is built to fly a return with a real PX4 or ArduPilot drone outdoors, with a pilot in command. So far the full mission has run only against the bridge's simulated vehicle; no physical flight has happened yet. The web app never talks MAVLink. A **bridge** runs on the drone's companion computer (or a laptop wired to the flight controller), exchanges short signed text lines with the app, and translates them into MAVLink.
 
 ```
 Customer app ──HTTPS──▶ Cloudflare Worker + D1 ◀──HTTPS poll (4G data)──▶ bridge ──MAVLink──▶ PX4 / ArduPilot
@@ -8,15 +8,18 @@ Customer app ──HTTPS──▶ Cloudflare Worker + D1 ◀──HTTPS poll (4G
                                    └────Twilio SMS (4G SMS-only SIM)───────┘
 ```
 
-Simulated returns keep working with no drone. A return only becomes a live flight when its owner registers a drone in **Fleet** (`/fleet`), arms it with the pre-flight checklist, and dispatches that return.
+Simulated returns keep working with no drone. A return only becomes a live flight when its owner registers a drone in **Fleet** (`/fleet`), arms it with the pre-flight checklist, and dispatches that return. No customer action launches a drone.
 
 ## Safety model
 
 The app is not a flight controller. The pilot in command keeps an RC transmitter with override authority, and the autopilot's own failsafes stay enabled.
 
-- **Operator gates.** A drone accepts live missions only for 30 minutes after its owner completes the checklist (RC pilot ready, area clear and authorized, pads checked on the map, failsafes configured). Every takeoff is launched by the operator. The customer's loading confirmation never launches the drone by itself.
-- **Server checks at dispatch:** fresh telemetry, 3D GPS fix with at least 6 satellites, battery ≥ 40%, drone on the ground, inside its geofence, pads set, no other mission.
-- **Geofence:** home point plus a radius of at most 2000 m. The maximum altitude is capped at 120 m (400 ft). Every GOTO target is checked against the fence on the server *and* again on the bridge.
+- **Operator gates.** A drone accepts live missions only for 30 minutes after its owner completes the checklist (RC pilot ready, area clear and authorized, home, pads and geofence on the map matching the real site, failsafes configured). Every takeoff is launched by the operator, and so is every landing at a customer's pin. The customer's loading confirmation never launches the drone by itself. When the drone stands on the ground more than 20 m from home, Fleet first asks "Is the area around the drone clear of people?" before **Dispatch live flight**, **Unloaded · send home**, a retried takeoff step and **Return home** (`awayOnGround` in `lib/fleet-view.ts`).
+- **Server checks at dispatch** (`dispatchBlockers` in `lib/drone-mission.ts`): fresh telemetry, 3D GPS fix with at least 6 satellites, battery ≥ 40%, drone on the ground, inside its geofence, both pads set, no other mission, and an unloaded, active return that is not waiting for a person (a Claude check of `needs_person`, or a stamped `not_drone_eligible`, holds it until someone approves it on `/merchant`; see `heldForPerson` in `lib/simulation.ts`). A ground report that changes any of these (state, fix, satellites, the battery floor, or a move of more than 2 m) is stored at once (`groundChange`).
+- **Customer pins are opt-in per drone.** Each drone has a pin zone, `pinRadius`, of 0–100 m around its surveyed pickup pad. 0 is the default (and what drones registered earlier read): every pickup uses the pad. A customer's map pin becomes the pickup only inside that zone and at least 15 m inside the geofence (`pickupFor`, `PIN_MARGIN_M`); otherwise Fleet says why it uses the pad. Changing the zone disarms the drone like any pad or limit change. Survey the whole circle: the drone may land anywhere in it.
+- **Hover gate at a pin.** The drone never lands at a pin by itself. It stops over the pin at cruise altitude (`HOVER_PICKUP`) and the server sends nothing until the operator, watching the spot, taps **Landing area clear · land**. That LAND is sent only while the drone's fresh report puts it airborne within 10 m of the pin (`atPin`, `PIN_HOVER_M`). Otherwise the operator taps **Use the pickup pad instead** (a GOTO to the pad, refused while the drone is on the ground) or ends the flight.
+- **Dispatch flies what Fleet showed.** Fleet sends the pickup it previewed with the dispatch. If the server's `pickupFor` now gives another one (the pin zone, a pad or the booking changed), dispatch answers 409 "The pickup changed. Review it and dispatch again." (`pickupMismatch`). A request without a pickup may only fly to the pad.
+- **Geofence:** home point plus a radius of at most 2000 m. The maximum altitude is capped at 120 m (400 ft). Every GOTO target is checked against the fence on the server *and* again on the bridge. The bridge's fence must be the same circle: `--fence-center` is Fleet's home, `--fence-radius` its geofence radius and `--max-alt` its maximum altitude (Fleet's bridge command lines fill them in). A smaller bridge fence makes pin GOTOs fail with `FENCE`; a larger or shifted one no longer protects the area the operator checked.
 - **Link:** commands expire (30 s over HTTPS, 300 s over SMS). The bridge rejects expired commands, replayed sequence numbers and bad signatures. When telemetry goes stale during a mission, the app shows a link alarm and stops issuing movement commands. The bridge sends GCS heartbeats, so the autopilot's GCS/datalink-loss failsafe triggers if the bridge dies. Configure it to RTL: PX4 `NAV_DLL_ACT=2`, ArduPilot `FS_GCS_ENABLE=1`.
 - **Abort** is never refused for fence, battery or GPS reasons (it is still rejected when expired, replayed or badly signed, and in a bridge dry run). Operator HOLD pauses the mission; LAND, RTL or ABORT end it.
 - **Home point.** Arming resets home on both PX4 and ArduPilot, so a drone re-armed at the drop pad would RTL to the drop pad. The mission therefore flies back with `GOTO` to the stored home pad and lands, and the bridge sends `DO_SET_HOME` back to `--fence-center` whenever it arms more than 10 m away, so autopilot failsafe RTLs also go home. If the autopilot does not accept it, the bridge disarms and fails the takeoff with `FAILED HOME_NOT_SET` instead of flying. `--fence-center` must be the real home pad.
@@ -24,7 +27,7 @@ The app is not a flight controller. The pilot in command keeps an RC transmitter
 
 ## Message format
 
-Each message is one ASCII line: space-separated tokens, then ` ~` and a signature. The signature is the first 16 hex characters of `HMAC-SHA256(key, body)`, where `body` is everything before ` ~` and `key` is the drone's 32-byte key in lowercase hex. Keys come from the Worker secret `DRONE_LINK_SECRET` (`HMAC-SHA256(secret, "aero-drone-key:<droneId>:<version>")`). D1 stores no key. Fleet shows the key when a drone is registered, and rotating it invalidates the old key.
+Each message is one ASCII line: space-separated tokens, then ` ~` and a signature. The signature is the first 16 hex characters of `HMAC-SHA256(key, body)`, where `body` is everything before ` ~` and `key` is the drone's 32-byte key in lowercase hex. Keys come from the Worker secret `DRONE_LINK_SECRET` (`HMAC-SHA256(secret, "aero-drone-key:<droneId>:<version>")`). D1 stores no key. Fleet shows the key when a drone is registered. Rotating it (Fleet asks first, and refuses during a flight or while the drone is airborne) invalidates the old key and retires every command still queued under it.
 
 Numbers are plain decimals with at most 3 integer digits: lat/lon with 6 decimals, meters with 1. Timestamps are Unix seconds.
 
@@ -71,12 +74,13 @@ Test vectors produced by the TypeScript implementation are in `tests/fixtures/dr
 
 ## Mission
 
-A live return flies home → pickup pad → drop pad → home. The phases, with the command each one sends:
+A live return flies home → pickup → drop pad → home. The pickup is the operator's pickup pad, which stays required, unless the drone has a pin zone and the customer's booked map pin qualifies (see the safety model; `pickupFor` in `lib/drone-mission.ts`). Fleet previews which one a return will use before dispatch and marks a qualifying pin on its map, and dispatch flies only that preview. The flight records it as `LiveFlight.pickupSource` (`pin` or `pad`). The bridge still rejects any target outside its own `--fence-radius`. The phases, with the command each one sends:
 
 | Phase | Command | Customer sees | Next |
 | --- | --- | --- | --- |
 | `TAKEOFF_OUT` | TAKEOFF cruise | Getting ready for takeoff | ack DONE |
-| `TO_PICKUP` | GOTO pickup | Your drone is on the way | ack DONE |
+| `TO_PICKUP` | GOTO pickup | Your drone is on the way | ack DONE (to `HOVER_PICKUP` at a pin) |
+| `HOVER_PICKUP` | — (pin only; the drone holds over the pin) | Your drone is overhead | operator **Landing area clear · land** → `LAND_PICKUP`, or **Use the pickup pad instead** → `TO_PICKUP` with the pad |
 | `LAND_PICKUP` | LAND | Your drone has arrived | ack DONE |
 | `AWAITING_LOAD` | — | Ready when you are | customer confirms loading |
 | `READY_TO_LAUNCH` | — | Package securely loaded | operator launches |
@@ -88,9 +92,17 @@ A live return flies home → pickup pad → drop pad → home. The phases, with 
 | `RETURNING` | GOTO home pad | Your return has landed. | ack DONE |
 | `LAND_HOME` | LAND | Your return has landed. | ack DONE → `COMPLETE` |
 
-A REJECTED/FAILED ack, an expired command, or an operator HOLD while airborne pauses the mission with a fault; the operator can retry the step (in a waiting phase, retry just clears the fault) or abort. HOLD while the drone waits on the ground is sent without pausing anything. An operator ABORT, LAND or RTL is queued directly, so it reaches the drone even if the mission record is busy, and it ends the mission; the customer sees the flight as ended by the pilot.
+**While the drone hovers over a pin.** After the GOTO is DONE the bridge gets no new command. The vehicle holds over the pin at cruise altitude in that GOTO's mode (ArduPilot `GUIDED`, PX4 `AUTO.LOITER`; the fake vehicle just hovers), keeps sending telemetry and uses battery. The bridge's own rules still run: after `--link-timeout` without the server (20 s by default, at least 45 s over SMS) it holds, and after twice that it returns to launch with ABORT semantics; an RC mode change hands the flight to the pilot; below `--battery-floor` it only logs, and the autopilot's battery failsafe acts. None of that sends an ack, so Fleet judges the drone by its fresh position (`atPin`):
 
-A customer can cancel before loading. What is sent depends on the phase, not on telemetry: during the first takeoff or the landing at pickup the drone lands where it is; en route to pickup it returns home (RTL); once landed at pickup nothing is sent, and the operator brings it back when the area is clear. That RTL is a takeoff: the bridge refuses it below its battery floor, outside its fence or without a 3D fix, and the drone must then be recovered by hand. The new command supersedes anything still queued, such as a pending TAKEOFF.
+- **Over the pin** (airborne within 10 m): **Landing area clear · land** is enabled.
+- **On the ground within 10 m** (an RC or failsafe landing): **It landed at the pin · continue** confirms it. The LAND it sends never lifts the drone (the bridge disarms it if needed), and the mission then waits for the customer to load.
+- **On the ground elsewhere:** land and divert are refused. End the flight with Return home or ABORT.
+- **Airborne away from the pin:** land is disabled. Use the pickup pad instead, Return home or ABORT.
+- **No fresh report:** land and divert are disabled. ABORT always works.
+
+A REJECTED/FAILED ack, an expired command, or an operator HOLD while airborne (hovering over a pin included) pauses the mission with a fault; the operator can retry the step (in a waiting phase, retry just clears the fault) or abort. HOLD while the drone waits on the ground is sent without pausing anything. An operator ABORT, LAND or RTL from **Manual commands** is queued directly, so it reaches the drone even if the mission record is busy, and it ends the mission; the customer sees the flight as ended by the pilot. To land at a pin for the pickup, use **Landing area clear · land**, not the manual Land. Once the operator has confirmed the unload (`unloadedAt`), the return record stays delivered whatever the empty drone does next: a fault or an abort on its way home adds no customer event, and the snapshot stays `COMPLETED` (`handedOff` in `lib/simulation.ts`). A flight that ended in the air takes the drone's first ground report afterwards as its final telemetry (`settledFinal`).
+
+A customer can cancel before loading. The new command supersedes anything still queued, such as a pending TAKEOFF. During the first takeoff or the landing at pickup (`TAKEOFF_OUT`, `LAND_PICKUP`) the drone lands where it is (LAND). On the way to the pickup or over the pin (`TO_PICKUP`, `HOVER_PICKUP`) it gets ABORT. The bridge flies ABORT as an RTL in the air, with LAND as a fallback, but never takes off with it from the ground (an RTL on the ground away from home climbs first). So the command is safe even when the drone has just touched down, for example after an RC landing at the pin that the server has not heard about yet, and a customer never launches a drone. Once landed at pickup (`AWAITING_LOAD`) nothing is sent, and the operator brings it back when the area is clear.
 
 ## Bridge
 

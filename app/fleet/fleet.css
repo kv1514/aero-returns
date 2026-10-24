@@ -1,0 +1,28 @@
+/* Fleet console additions (/fleet), loaded after app/ride.css: link state that stays in view, last-known telemetry, a compact phone header. */
+.fleet .fleet-top h1{white-space:nowrap}
+.fleet .fleet-setup{flex-wrap:wrap;justify-content:flex-end}
+.fleet .fleet-setup .fleet-live.warn{background:var(--ux-amber);color:#000}.fleet .fleet-setup .fleet-live.warn i{background:#000}
+.fleet .fleet-setup .fleet-live.ok{color:var(--ux-ink)}
+.fleet-last{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:#fff4d6;color:#6b4e00;font-size:calc(12px * var(--font-scale,1));font-weight:600;vertical-align:middle}
+body[data-theme=dark] .fleet-last{background:#3a2c08;color:#ffd680}
+.fleet .fleet-tiles.stale>div{outline:1px dashed var(--ux-muted);outline-offset:-1px}
+.fleet .fleet-tiles.stale strong{color:var(--ux-muted)}
+.fleet-alertbar{display:none}
+@media(max-width:760px){
+  .fleet .fleet-top{position:static;padding:10px 12px;gap:8px}
+  .fleet .fleet-top h1{font-size:calc(18px * var(--font-scale,1))}
+  .fleet .fleet-setup{justify-content:flex-start}
+  .fleet .fleet-setup .fleet-live{display:none}
+  .fleet-alertbar{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:20;padding:10px 12px;background:var(--ux-amber);color:#000;font-weight:600;font-size:calc(13px * var(--font-scale,1));line-height:1.35}
+  .fleet-alertbar svg{flex:none}
+}
+/* The phone rule in ride.css shrinks every .ux-pill to a 44 px icon; Fleet's "Add" pill has a text label. */
+.fleet .fleet-list-head .ux-pill{width:auto;padding:0 14px}
+/* The Home/Pickup/Drop bar (bottom 12px, 36px tall) never covers the map attribution, and lets map clicks through its empty part. */
+.fleet-card.map-card :is(.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left){bottom:calc(52px + 12px * (var(--font-scale,1) - 1))}
+.fleet-place{pointer-events:none}.fleet-place>*{pointer-events:auto}
+.fleet-pin-zone{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:calc(13px * var(--font-scale,1))}
+.fleet-pin-zone label{flex:1 1 220px;line-height:1.6;color:var(--ux-muted)}
+.fleet-pin-zone input{width:64px;height:32px;margin:0 4px;padding:0 8px;border-radius:8px;border:1px solid var(--ux-line);background:var(--ux-bg);color:var(--ux-ink);font:inherit;font-variant-numeric:tabular-nums}
+.fleet-pin-zone button{padding:8px 12px;border-radius:16px;background:var(--ux-soft);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
+.fleet-pin-zone button:disabled{opacity:.5}

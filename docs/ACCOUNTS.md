@@ -1,12 +1,12 @@
 # Google and Amazon sign-in with Supabase
 
-AERO uses Supabase Auth for optional social accounts. Existing demo returns remain in Cloudflare D1, scoped to a verified Supabase user ID after sign-in (`supabase:<uuid>`). The original Site or guest history is not silently copied into a new account. No database migration or service-role key is required for this architecture.
+AERO uses Supabase Auth for optional social accounts. Existing demo returns remain in Cloudflare D1, scoped to a verified Supabase user ID after sign-in (`supabase:<uuid>`). The original guest history is not silently copied into a new account. No database migration or service-role key is required for this architecture.
 
-The current hosted Site remains owner-private. App sign-in does not bypass Sites sharing. Allowing other people through the hosting gate requires a separate, explicit sharing change or deployment to another host.
+The public deployment is the Cloudflare Worker `aero-returns` (https://aero-returns.kv15.workers.dev). It has no access gate: anyone with the link can use it, so owner scoping is the protection. Every return, drone and linked account belongs to one owner (a random HttpOnly guest cookie, the demo account, or a server-verified Supabase user), and signing in never reveals another owner's history. The earlier ChatGPT Sites prototype keeps its own owner-private hosting gate.
 
 ## Runtime configuration
 
-Set these through Sites runtime settings and redeploy. Do not commit values.
+Set these as Worker secrets (`npx wrangler secret put NAME --config dist/server/wrangler.json`; full list in [`DEPLOY.md`](DEPLOY.md)), and locally in the ignored `.dev.vars`. Do not commit values. None of them is set on the Worker yet (`/api/account` reports `configured:false`), so its sign-in buttons stay disabled.
 
 - `SUPABASE_URL`: HTTPS project URL.
 - `SUPABASE_PUBLISHABLE_KEY`: publishable key, never a service-role/secret key.
@@ -18,7 +18,7 @@ Supabase Site URL: `https://aero-returns.kv15.workers.dev` (the earlier ChatGPT 
 Allowed redirect URL: `https://aero-returns.kv15.workers.dev/api/account/callback`. Add it in Supabase before enabling Google sign-in on the Worker.
 For local testing, separately allow `http://127.0.0.1:5173/api/account/callback`.
 
-The app uses the pinned `@supabase/ssr` SDK, PKCE, HttpOnly/SameSite cookies and server-side `getUser()` verification. Auth responses are no-store. POST sign-in and DELETE sign-out require the same origin; callbacks return only to the fixed AERO root. Failed identity verification never falls back to another owner's history. User metadata is display-only. Signing out clears the browser's Supabase session; it does not sign out of Google, Amazon, or the Sites hosting gate.
+The app uses the pinned `@supabase/ssr` SDK, PKCE, HttpOnly/SameSite cookies and server-side `getUser()` verification. Auth responses are no-store. POST sign-in and DELETE sign-out require the same origin; callbacks return only to the fixed AERO root. Failed identity verification never falls back to another owner's history. User metadata is display-only. Signing out clears the browser's Supabase session; it does not sign out of Google or Amazon.
 
 ## Google
 
@@ -53,22 +53,22 @@ Amazon profile: https://developer.amazon.com/docs/login-with-amazon/customer-pro
 
 ## Setup status
 
-Supabase is provisioned and connected to the deployed app. Organization: AERO (`ngorkhrgbaadljsezvou`, Free plan). Project: AERO (`hkmeykcgwnaatkzgukth`, `us-west-1`, healthy). The app's runtime URL and publishable key are configured; privileged keys are not used. The Site URL and exact hosted callback above are saved in Supabase.
+Supabase is provisioned. Organization: AERO (`ngorkhrgbaadljsezvou`, Free plan). Project: AERO (`hkmeykcgwnaatkzgukth`, `us-west-1`, healthy). Its URL and publishable key were configured on the ChatGPT Sites prototype only; the Worker has neither, and privileged keys are not used anywhere. The Sites prototype's Site URL and callback were saved in Supabase. Whether the workers.dev Site URL and callback above are saved there is not recorded; check before enabling sign-in on the Worker.
 
 The `amazon-userinfo` Edge Function is deployed (version 1). Live checks confirm missing/invalid tokens return 401, unsupported methods return 405, and responses have `Cache-Control: no-store`. Successful Amazon authentication is still unverified.
 
-Google sign-in is enabled and verified on the hosted app. Google Cloud project `aero-sign-in` (AERO Sign In) contains the web client `AERO Web — Supabase`; the client secret is stored only in Supabase provider configuration. Google received the owner's approved policy agreement. The sole redirect URI is `https://hkmeykcgwnaatkzgukth.supabase.co/auth/v1/callback`. The live flow requested only `email profile` (name, profile picture, email). No Google billing account was attached.
+Google sign-in was enabled and verified on the Sites prototype, not on the Worker. Google Cloud project `aero-sign-in` (AERO Sign In) contains the web client `AERO Web — Supabase`; the client secret is stored only in Supabase provider configuration. Google received the owner's approved policy agreement. The sole redirect URI is `https://hkmeykcgwnaatkzgukth.supabase.co/auth/v1/callback`. The live flow requested only `email profile` (name, profile picture, email). No Google billing account was attached.
 
-Google's publishing status remains **Testing** with the owner's Google account registered as a test user. The app remains owner-private at the Sites layer. Do not claim public release or extend access without an explicit request. Google's consent screen currently displays the Supabase project hostname; custom brand verification is not complete.
+Google's publishing status remains **Testing** with the owner's Google account registered as a test user, so only that account can sign in with Google even after the Worker gets the Supabase secrets. Do not claim a public Google sign-in or add test users without an explicit request. Google's consent screen currently displays the Supabase project hostname; custom brand verification is not complete.
 
-Hosted browser verification on October 23, 2026 (Pacific): first Google consent/login returned `auth=success`; the account panel displayed the verified name/email; reload preserved the session; sign-out restored the original demo history; signing in again returned to the same separate Google-owned return history. Live tests with a second Google account, cancellation after consent, and expiration/replay scenarios remain outstanding; existing offline policy/ownership checks are documented in HANDOFF.
+Browser verification on the Sites prototype on October 23, 2026 (Pacific): first Google consent/login returned `auth=success`; the account panel displayed the verified name/email; reload preserved the session; sign-out restored the original demo history; signing in again returned to the same separate Google-owned return history. Live tests with a second Google account, cancellation after consent, and expiration/replay scenarios remain outstanding; existing offline policy/ownership checks are documented in HANDOFF.
 
-`SUPABASE_GOOGLE_ENABLED=true` is deployed. `SUPABASE_AMAZON_ENABLED=false` remains intentional: the owner deferred Amazon Developer registration. The deployed adapter is ready for that future setup, but there is no Amazon client/security profile or successful Amazon login. Do not reuse SideSpace projects or the Maps Demo Project for this setup.
+`SUPABASE_GOOGLE_ENABLED=true` was set on the Sites prototype only. `SUPABASE_AMAZON_ENABLED=false` remains intentional: the owner deferred Amazon Developer registration. The deployed adapter is ready for that future setup, but there is no Amazon client/security profile or successful Amazon login. Do not reuse SideSpace projects or the Maps Demo Project for this setup.
 
 ## Built-in demo profile
 
-`POST /api/account/demo` enters Alex Demo without OAuth. A random UUID capability is stored in a 30-day HttpOnly/SameSite=Lax cookie (`Secure` over HTTPS), plus an explicit active-mode cookie. Server ownership is `demo:<capability>` and is isolated from Supabase, Sites, guest identities, and other browsers. A missing/invalid capability in active mode fails closed. The capability never appears in the account JSON.
+`POST /api/account/demo` enters Alex Demo without OAuth. A random UUID capability is stored in a 30-day HttpOnly/SameSite=Lax cookie (`Secure` over HTTPS), plus an explicit active-mode cookie. Server ownership is `demo:<capability>` and is isolated from Supabase users, guest identities, other browsers and, on the Sites prototype, Sites users. A missing/invalid capability in active mode fails closed. The capability never appears in the account JSON.
 
-`DELETE /api/account/demo` (or account sign-out in demo mode) clears active mode only. The original Google/Sites session is preserved, and the inactive demo cookie allows practice history to resume. Both mutations require the exact request Origin. Mode switches clear booking drafts and broadcast a reload to other tabs; photo references are memory-only and cleared by reload. No shared email/password, Supabase user, purchase access, or retailer authorization is created. The owner-private Sites gate still applies.
+`DELETE /api/account/demo` (or account sign-out in demo mode) clears active mode only. The original guest (or Google) session is preserved, and the inactive demo cookie allows practice history to resume. Both mutations require the exact request Origin. Mode switches clear booking drafts and broadcast a reload to other tabs; photo references are memory-only and cleared by reload. No shared email/password, Supabase user, purchase access, or retailer authorization is created. The public Worker has no access gate, so this owner scoping is what keeps practice history private.
 
 `tests/demo-account.test.ts` checks identity namespaces, invalid sessions, and cookie attributes. `scripts/demo-account-smoke.ts` checks origin rejection, demo/original and browser-to-browser read/write isolation, loading confirmation, completion persistence, exit/resume, and invalid-session recovery against a running local app. Demo mode is explicitly displayed in the header and account panel.

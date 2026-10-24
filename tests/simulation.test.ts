@@ -23,7 +23,7 @@ test('facility selection excludes incompatible and nonparticipating sites',()=>{
 });
 test('unsupported packages cannot create a booking',()=>{assert.throws(()=>createReturn({...DEMO_PACKAGE,weight:20},'x',t0),/No compatible/);});
 test('full booking-to-handoff journey requires an explicit load confirmation',()=>{
-  let r=seed(),t=timing(r);
+  let r=seed();const t=timing(r);
   assert.equal(snapshot(r,t0).state,'ASSIGNED');assert.equal(snapshot(r,t0+4000).state,'PRE_FLIGHT');
   assert.equal(snapshot(r,t0+15000).state,'EN_ROUTE_TO_PICKUP');
   assert.throws(()=>control(r,'load',t0+15000),/Wait until/);
@@ -40,7 +40,7 @@ test('full booking-to-handoff journey requires an explicit load confirmation',()
   assert.ok(r.events.every((e,i)=>!i||e.at>=r.events[i-1].at));
 });
 test('pause, acceleration, resume and serialization preserve position without jumps',()=>{
-  let r=seed(),at=t0+30000, before=snapshot(r,at);
+  let r=seed();const at=t0+30000,before=snapshot(r,at);
   r=control(r,'pause',at);assert.deepEqual(snapshot(r,at+60000).point,before.point);
   r=control(r,'speed',at+60000,10);assert.deepEqual(snapshot(r,at+60000).point,before.point);
   r=control(r,'resume',at+60000);assert.equal(snapshot(r,at+61000).elapsed,before.elapsed+10);

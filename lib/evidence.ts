@@ -25,6 +25,7 @@ export const SCAN_LIMIT = 500;
 // Malformed JSON makes json_extract throw for the whole query, so every read is guarded.
 const field = (column: string, path: string) => `CASE WHEN json_valid(${column}) THEN json_extract(${column}, '${path}') END`;
 const loaded = `${field('record', '$.loaded')} = 1`, NEWEST_FIRST = 'ORDER BY created_at DESC, id DESC';
+const HELD_EVENTS = `SELECT owner, ${field('record', '$.review.eventId')} FROM returns WHERE ${field('record', '$.review.hold')} = 1`;
 export const EVIDENCE_SQL = {
   returns: `SELECT COUNT(*) AS booked, COALESCE(SUM(${field('record', '$.live.phase')} = 'COMPLETE'), 0) AS liveCompleted, COALESCE(SUM(${field('record', '$.review.verdict')} IS NOT NULL), 0) AS withCheck FROM returns`,
   // Data minimisation: addresses, notes, references, reviews, the event journal and telemetry never leave D1. The pickup
@@ -32,7 +33,9 @@ export const EVIDENCE_SQL = {
   // scan and older must split the rows the same way, so equal timestamps are ordered by id in both.
   scan: `SELECT json_remove(record, '$.events', '$.review', '$.package.address', '$.package.instructions', '$.package.returnReference', '$.live.telemetry') AS record FROM returns WHERE ${loaded} ${NEWEST_FIRST} LIMIT ${SCAN_LIMIT}`,
   older: `SELECT COUNT(*) AS n FROM (SELECT record FROM returns WHERE ${loaded} ${NEWEST_FIRST} LIMIT -1 OFFSET ${SCAN_LIMIT}) WHERE ${field('record', '$.events[#-1].state')} = 'COMPLETED'`,
-  events: `SELECT COALESCE(SUM(kind = 'agent'), 0) AS checks, COALESCE(SUM(kind = 'agent' AND ${field('result', '$.verdict')} = 'needs_person'), 0) AS needsPerson, COALESCE(SUM(kind IN ('review', 'pickup')), 0) AS photo FROM integration_events WHERE status = 'complete' AND kind IN ('agent', 'review', 'pickup')`,
+  // Sent to a person as heldForPerson holds: every needs_person check, and a not_drone_eligible one only when a booking by
+  // the same owner attached it with bookedReview's hold stamp (a check that was never booked, or predates the stamp, held nothing).
+  events: `SELECT COALESCE(SUM(kind = 'agent'), 0) AS checks, COALESCE(SUM(kind = 'agent' AND (${field('result', '$.verdict')} = 'needs_person' OR (${field('result', '$.verdict')} = 'not_drone_eligible' AND (owner, id) IN (${HELD_EVENTS})))), 0) AS needsPerson, COALESCE(SUM(kind IN ('review', 'pickup')), 0) AS photo FROM integration_events WHERE status = 'complete' AND kind IN ('agent', 'review', 'pickup')`,
   drones: 'SELECT COUNT(*) AS n FROM drones',
 };
 
@@ -69,6 +72,14 @@ export async function collectEvidence(db: EvidenceDB | undefined, flags: Evidenc
     claudeChecks: count(events?.checks), claudeNeedsPerson: count(events?.needsPerson), claudePhotoChecks: count(events?.photo),
     dronesRegistered: count(drones?.n),
   };
+}
+
+/** Every integration_events kind that is a Claude call: the return check, the photo review and the pickup photo check. */
+export const CLAUDE_KINDS = ['agent', 'review', 'pickup'] as const;
+/** One session's completed calls by provider, from its own `kind, COUNT(*)` rows (/api/integrations `verified`). */
+export function verifiedCounts(rows: { kind: string; n: unknown }[]) {
+  const sum = (kinds: readonly string[]) => rows.reduce((total, r) => total + (kinds.includes(r.kind) ? count(r.n) ?? 0 : 0), 0);
+  return { anthropic: sum(CLAUDE_KINDS), apify: sum(['lookup']) };
 }
 
 export type EvidenceChip = { text: string; recorded: boolean };

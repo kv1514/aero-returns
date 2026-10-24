@@ -11,7 +11,7 @@ const held = (id = 'h1', review: ReturnReview = flag): ReturnRecord => ({ ...cre
 const home: Point = [-122.2595, 37.8719], pad: Point = [-122.2590, 37.8722], drop: Point = [-122.2585, 37.8716];
 const drone: Drone = { id: 'tst001', owner: 'guest:x', name: 'Test X500', transport: 'https', phone: null, phoneVerified: false, keyVersion: 1, config: { home, pickupPad: pad, dropPad: drop, radius: 300, maxAlt: 60, cruiseAlt: 25 }, armedUntil: t0 + 30 * min, activeReturn: null, lastSeq: 0, lastSeen: t0, telemetry: null, createdAt: t0 };
 
-test('only an undecided needs_person verdict holds a return', () => {
+test('an undecided needs_person verdict holds a return (not_drone_eligible too: tests/simulation-hold.test.ts)', () => {
   assert.equal(heldForPerson(flag), true);
   assert.equal(heldForPerson({ ...flag, approvedAt: t0 }), false);
   assert.equal(heldForPerson({ ...flag, declinedAt: t0 }), false);

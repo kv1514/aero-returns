@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { gateReview, validProductURL } from './integrations';
 import { gatePickupDetection } from './pickup-guide';
 import { session } from './session';
-import { demoMode, exitDemoCookie } from './demo-account';
+import { sessionFailure } from './http';
 import { ClaudeUnavailable, DEFAULT_CLAUDE_MODEL, PICKUP_SCHEMA, REVIEW_SCHEMA, claudeJSON, shapePickup, shapeReview } from './claude';
 import { runReturnAgent } from './return-agent';
 import { packageSchema } from './server';
@@ -15,8 +15,8 @@ const agentInputSchema=z.object({description:z.string().trim().min(3).max(1000),
 const imageInputSchema=z.object({product:z.string().min(3).max(1000),images:z.array(z.object({mediaType:z.enum(['image/jpeg','image/png','image/webp']),data:z.string().min(10).max(2000000).regex(/^[A-Za-z0-9+/=]+$/)})).min(1).max(3)});
 /** Model answers that fail AERO's gates are a provider problem, not a bad request from the person. */
 function usable<T>(gate:()=>T,message='Claude returned an answer AERO could not use. Review manually or try again.'):T{try{return gate();}catch{throw new ClaudeUnavailable(message,502);}}
-/** An unresolvable session (invalid demo cookie, expired account) is an explained 401, never an empty 500. Broken demo mode is cleared so the next load starts cleanly. */
-export function sessionFailure(request:Request,extra:Record<string,unknown>={}){const demo=demoMode(request.headers.get('cookie'));return Response.json({...extra,error:demo?'Your demo session was invalid, so AERO left the demo account. Start it again from Your account.':'Your account session expired or is unavailable. Open Your account to sign in again.',sessionError:true},{status:401,headers:{'Cache-Control':'private, no-store',...(demo?{'Set-Cookie':exitDemoCookie(request)}:{})}});}
+/** The one 401 for an unresolvable session; it lives in ./http so routes and lib/server.ts can share it without importing this file. */
+export { sessionFailure };
 export function integrations(){return {anthropic:!!env.ANTHROPIC_API_KEY,apify:!!(env.APIFY_TOKEN&&env.APIFY_ACTOR_ID),model:env.ANTHROPIC_MODEL||DEFAULT_CLAUDE_MODEL,storage:'Cloudflare D1',simulation:true};}
 /** Runs the custom Apify Actor for one public product page. Throws with a user-facing message; never invents values. */
 async function apifyLookup(url:string){
@@ -67,8 +67,8 @@ export async function integrationRequest(request:Request,kind:'lookup'|'review'|
     }
     if(kind==='agent'){
       const model=integrations().model,result=await runReturnAgent(agentInput!,{apiKey:env.ANTHROPIC_API_KEY!,model,lookup:integrations().apify?apifyLookup:undefined});
-      // Stored as evidence and for the merchant view: the decision and tool log, never the photos or the description.
-      const {decision}=result,summary={verdict:decision.verdict,condition:decision.condition,disposition:decision.disposition,confidence:decision.confidence,explanation:decision.explanation,model:result.served,tools:result.steps.map(s=>s.tool)};
+      // Stored as evidence and for the merchant view: the decision, Claude's questions and the tool log, never the photos or the description.
+      const {decision}=result,summary={verdict:decision.verdict,condition:decision.condition,disposition:decision.disposition,confidence:decision.confidence,explanation:decision.explanation,questions:decision.questions.slice(0,5),model:result.served,tools:result.steps.map(s=>s.tool)};
       await env.DB.prepare('UPDATE integration_events SET status = ?,result = ? WHERE id = ?').bind('complete',JSON.stringify(summary),eventId).run();
       return reply({source:'live Claude API',model:result.served,decision,eligibility:result.eligibility,steps:result.steps,eventId});
     }

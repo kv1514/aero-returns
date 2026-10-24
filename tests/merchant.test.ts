@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregate, confidencePct, formatDuration, merchantRow, merchantView, MINUTES_PER_STORE_TRIP, needsPersonQueue, needsPersonReasons, PERSON_WAIT, scopeOf, stageOf } from '../lib/merchant';
+import { aggregate, confidencePct, formatDuration, merchantRow, merchantView, MINUTES_PER_STORE_TRIP, needsPersonQueue, needsPersonReasons, NO_CHECK, PERSON_WAIT, questionEventIds, questionsByEvent, reviewQuestions, scopeOf, stageOf, withQuestions, type DeskReview } from '../lib/merchant';
 import { control, createReturn, DEMO_PACKAGE, type FlightState, type Point, type ReturnRecord } from '../lib/simulation';
 import { enterPhase, startLive, type Drone } from '../lib/drone-mission';
 import type { ReturnReview } from '../lib/return-agent-shared';
@@ -123,12 +123,13 @@ const desk = (records: unknown[], extra: Partial<View> = {}, state: { error?: st
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 test('the desk splits received returns into simulated and live and never says a drone flew', () => {
   const html = text(desk([received('s1', t0, 4 * min), received('s2', t0, 5 * min), live('l1', [...LIVE_DONE])]));
-  assert.match(html, /Returns received 3 2 simulated, 1 live flight · of 3 booked/);
+  assert.match(html, /Returns received 3 Received: 2 simulated, 1 over the drone link · 3 booked/);
   assert.match(html, /Store trips avoided Demo 3 Assumes one per received return, simulated or live/);
   assert.match(html, /2 simulated \(demo speed controls shorten them\) and 1 over the live drone link/);
   assert.match(html, /the vehicle may be a simulator/);
   assert.doesNotMatch(html, /\bflew on\b|private/i);
-  assert.match(text(desk([received('s1', t0, 4 * min)])), /Returns received 1 All simulated · of 1 booked/);
+  assert.match(text(desk([received('s1', t0, 4 * min)])), /Returns received 1 Received: all simulated · 1 booked/);
+  assert.doesNotMatch(html, /of \d+ booked/);
 });
 test('a needs-person return shows the shared merchant phrase in the queue and the table', () => {
   const html = desk([book('n1', t0, review({ verdict: 'needs_person', condition: 'used', disposition: 'refurbish', confidence: .849 }))]);
@@ -195,4 +196,70 @@ test('cleanup aborts an in-flight request without reporting it', async t => {
   const p = poller((n, init) => { signal = init.signal ?? undefined; return hang(n, init); });
   p.stop(); await flush();
   assert.equal(signal?.aborted, true); assert.deepEqual(p.events, []);
+});
+
+test('a return booked without the Claude check says so instead of "Awaiting check"', () => {
+  const html = desk([received('u1', t0, 4 * min), book('u2')]);
+  assert.doesNotMatch(html, /Awaiting check/i);
+  assert.equal(html.split(`data-label="Claude grade"><span class="m-sub">${NO_CHECK}</span>`).length - 1, 2);
+  assert.equal(html.split(`data-label="Disposition"><span class="m-pill muted">${NO_CHECK}</span>`).length - 1, 2);
+  assert.match(text(html), new RegExp(`${NO_CHECK} 2 Active and received returns`), 'the expected-disposition bar counts them under the same label');
+});
+test('the reviewer reads Claude’s whole note, labelled as advisory, and its questions before approving', () => {
+  const explanation = 'Your package fits AERO’s size and weight limits, and we checked it as if fragile. But the box was crushed, so a mug may be cracked: check that any broken pieces are safely packed before pickup. '.repeat(3).trim();
+  // As booked: the review keeps the verdict, and Claude's questions come from its own stored agent event (what /api/merchant reads).
+  const flagged = review({ verdict: 'needs_person', condition: 'damaged', disposition: 'inspect', confidence: .6, explanation });
+  const event = { id: flagged.eventId, result: JSON.stringify({ verdict: 'needs_person', explanation, questions: ['Is any piece broken?', 'Is any piece broken?', 'Can it be marked fragile?', 7], model: 'claude-opus-5-5', tools: ['check_drone_eligibility'] }) };
+  const view = merchantView([book('q1', t0, flagged)], t0 + min);
+  assert.deepEqual(questionEventIds(view.rows), [flagged.eventId]);
+  const html = renderToStaticMarkup(createElement(MerchantDesk, { view: { ...withQuestions(view, questionsByEvent([event])), limit: 100, now: t0 + min, scope: 'browser' }, error: '', offline: false, onDecide: () => {} }));
+  assert.ok(html.includes(`“${explanation}”`), 'the full explanation, not a clipped preview');
+  assert.match(text(html), /Claude’s note from the return check · advisory\. Claude can’t change the booking; any setting it mentions is a suggestion\./);
+  assert.match(text(html), /Claude’s questions to confirm before pickup Is any piece broken\? Can it be marked fragile\?/);
+  const approve = html.indexOf('aria-label="Approve AR-Q1 for drone pickup"'), decline = html.indexOf('aria-label="Decline AR-Q1 for drone pickup"');
+  assert.ok(approve > html.indexOf(explanation) && decline > approve, 'each decision button names its return and comes after the note');
+});
+test('stored questions are read defensively: older reviews have none, junk is dropped', () => {
+  assert.deepEqual(reviewQuestions(review()), []); assert.deepEqual(reviewQuestions(null), []);
+  assert.deepEqual(reviewQuestions({ ...review(), questions: [' Is it the blue one? ', '', 3, 'Is it the blue one?'] } as unknown as ReturnReview), ['Is it the blue one?']);
+  assert.equal(reviewQuestions({ ...review(), questions: Array.from({ length: 9 }, (_, i) => `Q${i}`) } as unknown as ReturnReview).length, 5);
+});
+test('the desk looks up questions only for held reviews stored without them, and a record’s own questions win', () => {
+  const id = (n: number) => `${n}`.repeat(8) + '-1111-4111-8111-111111111111';
+  const held = book('h1', t0, review({ verdict: 'needs_person', confidence: .6, eventId: id(2) })), clear = book('c1', t0, review({ eventId: id(3) }));
+  const approved = book('a1', t0, review({ verdict: 'needs_person', confidence: .6, eventId: id(4), approvedAt: t0 + 1 }));
+  const kept: DeskReview = { ...review({ verdict: 'needs_person', confidence: .6, eventId: id(5) }), questions: ['Stored with the booking?'] };
+  const view = merchantView([held, clear, approved, book('k1', t0, kept), book('n1')], t0 + min);
+  assert.deepEqual(questionEventIds(view.rows), [id(2)], 'cleared, approved, unchecked and already-answered rows need no lookup');
+  const byEvent = questionsByEvent([{ id: id(2), result: JSON.stringify({ questions: ['Is the seal intact?'] }) }, { id: id(5), result: JSON.stringify({ questions: ['From the event'] }) }, { id: id(6), result: '{not json' }, { id: id(7), result: JSON.stringify({ verdict: 'fly_standard' }) }]);
+  assert.deepEqual([...byEvent.keys()], [id(2), id(5)], 'unreadable rows and rows without questions are skipped');
+  const rows = withQuestions(view, byEvent).rows;
+  assert.deepEqual(reviewQuestions(rows.find(r => r.id === 'h1')!.review), ['Is the seal intact?']);
+  assert.deepEqual(reviewQuestions(rows.find(r => r.id === 'k1')!.review), ['Stored with the booking?']);
+  assert.equal(withQuestions(view, new Map()), view, 'nothing found leaves the view as it was');
+  assert.equal(questionEventIds(merchantView(Array.from({ length: 60 }, (_, i) => book(`m${i}`, t0, review({ verdict: 'needs_person', confidence: .6, eventId: `${i}` }))), t0).rows).length, 50, 'stays under D1’s bound-value limit');
+});
+test('simulated returns show their simulated fleet drone when the record names one', () => {
+  const named: ReturnRecord = { ...book('d1'), drone: { id: 'sim-2', name: 'Hawk 2', base: home, meters: 420 } };
+  assert.equal(merchantRow(named, t0).drone, 'Hawk 2'); assert.equal(merchantRow({ ...book('d2'), drone: undefined }, t0).drone, null, 'returns booked before the simulated fleet have none');
+  assert.equal(merchantRow({ ...book('d3'), drone: { name: 42 } } as unknown as ReturnRecord, t0).drone, null);
+  assert.match(text(desk([named])), /Simulation · Hawk 2/);
+});
+test('a held not-eligible return says Claude found it outside the drone limits, not the generic line', () => {
+  assert.deepEqual(needsPersonReasons({ verdict: 'not_drone_eligible', condition: 'like_new', confidence: .95 }), ['Claude found it may be outside the drone limits']);
+  assert.deepEqual(needsPersonReasons({ verdict: 'not_drone_eligible', condition: 'damaged', confidence: .6 }), ['Claude found it may be outside the drone limits', 'Possible damage', 'Low confidence (60%, under 85%)']);
+  assert.deepEqual(needsPersonReasons({ verdict: 'needs_person', condition: 'like_new', confidence: .95 }), ['The item may not match its description, or Claude asked for a person to judge it']);
+  const stamped = { ...review({ verdict: 'not_drone_eligible', disposition: 'inspect' }), hold: true as const };
+  const html = text(desk([book('ne1', t0, stamped), book('ne2', t0, review({ verdict: 'not_drone_eligible', eventId: '22222222-2222-4222-8222-222222222222' }))]));
+  assert.equal(html.split('Claude found it may be outside the drone limits').length - 1, 1, 'only the stamped return is held; the legacy one flies as booked');
+  assert.doesNotMatch(html, /The item may not match its description/);
+});
+test('a live drone hovering before it lands at pickup reads as hovering, over the pin or the pad', () => {
+  const hover = live('hv1', ['TAKEOFF_OUT', 'TO_PICKUP', 'HOVER_PICKUP']);
+  const atPin = merchantRow({ ...hover, live: { ...hover.live!, pickupSource: 'pin' } }, t0 + 5 * min), atPad = merchantRow({ ...hover, live: { ...hover.live!, pickupSource: 'pad' } }, t0 + 5 * min);
+  assert.deepEqual([atPin.state, atPin.stage, atPin.status], ['ARRIVED_AT_PICKUP', 'Booked', 'Drone hovering over the customer’s pin']);
+  assert.equal(atPad.status, 'Drone hovering over the pickup pad');
+  assert.equal(merchantRow(live('hv2', ['TAKEOFF_OUT', 'TO_PICKUP', 'LAND_PICKUP']), t0 + 5 * min).status, 'At the customer’s pickup');
+  const paused = merchantRow(live('hv3', ['TAKEOFF_OUT', 'TO_PICKUP', 'HOVER_PICKUP'], 'LINK_LOST'), t0 + 5 * min);
+  assert.deepEqual([paused.state, paused.stage, paused.status], ['FAILED', 'Booked', 'Paused for assistance']);
 });

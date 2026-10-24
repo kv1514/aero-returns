@@ -1,9 +1,8 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Footprints, Package, PackageCheck, Plane, ShieldCheck, Sparkles, Store, Timer, TriangleAlert, UserRound, X } from 'lucide-react';
 import { useAccessibility } from './accessibility';
-import { CONDITION_LABEL, CONFIDENT, confidencePct, formatDuration, MERCHANT_DISPOSITIONS, needsPersonQueue, needsPersonReasons, PERSON_APPROVED, PERSON_WAIT, type MerchantDisposition, type MerchantRow, type MerchantScope, type MerchantStage, type MerchantView } from '@/lib/merchant';
+import { CONDITION_LABEL, CONFIDENT, confidencePct, formatDuration, MERCHANT_DISPOSITIONS, needsPersonQueue, needsPersonReasons, NO_CHECK, PERSON_APPROVED, PERSON_WAIT, reviewQuestions, type MerchantDisposition, type MerchantRow, type MerchantScope, type MerchantStage, type MerchantView } from '@/lib/merchant';
 import { DISPOSITION_LABEL, VERDICT_LABEL, type ReturnReview } from '@/lib/return-agent-shared';
 
 export type View = MerchantView & { limit: number; now: number; scope: MerchantScope };
@@ -13,7 +12,8 @@ const ANY_SCOPE = { whose: 'your returns', where: 'by you' };
 const STAGE_TONE: Record<MerchantStage, string> = { Booked: '', 'Picked up': 'info', 'In flight': 'info', Received: 'good', Cancelled: 'muted' };
 const VERDICT_TONE: Record<ReturnReview['verdict'], string> = { fly_standard: 'good', fly_priority: 'good', not_drone_eligible: 'bad', needs_person: 'warn' };
 const DISPOSITION_TONE: Record<MerchantDisposition, string> = { restock: 'good', inspect: 'warn', refurbish: 'info', return_to_vendor: 'bad', 'awaiting check': 'muted' };
-const dispositionLabel = (d: MerchantDisposition) => (d === 'awaiting check' ? 'Awaiting check' : DISPOSITION_LABEL[d]);
+// A check can only run before booking, so a return without one is never "awaiting" it.
+const dispositionLabel = (d: MerchantDisposition) => (d === 'awaiting check' ? NO_CHECK : DISPOSITION_LABEL[d]);
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const confident = (c: number) => `${confidencePct(c)}% confident`;
 function clock(ts: number | null, now: number) {
@@ -30,10 +30,10 @@ function failure(e: unknown, timedOut: boolean) {
 }
 
 function Flight({ row }: { row: MerchantRow }) {
-  return row.live ? <span className="m-flight live"><i />Live flight{row.drone ? ` · ${row.drone}` : ''}</span> : <span className="m-flight"><Sparkles size={12} />Simulation</span>;
+  return row.live ? <span className="m-flight live"><i />Live flight{row.drone ? ` · ${row.drone}` : ''}</span> : <span className="m-flight"><Sparkles size={12} />Simulation{row.drone ? ` · ${row.drone}` : ''}</span>;
 }
 function Grade({ review }: { review: ReturnReview | null }) {
-  if (!review) return <span className="m-sub">Not checked</span>;
+  if (!review) return <span className="m-sub">{NO_CHECK}</span>;
   // A flagged return keeps Claude's verdict; the person's decision is shown next to it, never in place of it.
   const decided = review.approvedAt ? ' · approved by a person' : review.declinedAt ? ' · declined by a person' : '';
   return <><span className={`m-pill ${VERDICT_TONE[review.verdict]}`}>{VERDICT_LABEL[review.verdict]}{decided}</span><span className="m-sub">{CONDITION_LABEL[review.condition]} · {confident(review.confidence)}</span></>;
@@ -108,10 +108,10 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
   const mix = a ? Math.max(1, ...MERCHANT_DISPOSITIONS.map(d => a.byDisposition[d])) : 1;
   // "Live" means the signed drone link, not proof that an aircraft flew; the trust panel says so.
   const simulated = a ? a.received - a.liveReceived : 0, plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-  const receivedSplit = !a?.received ? '' : !a.liveReceived ? 'All simulated · ' : !simulated ? 'All live flights · ' : `${simulated} simulated, ${plural(a.liveReceived, 'live flight', 'live flights')} · `;
+  const receivedSplit = !a?.received ? '' : !a.liveReceived ? 'Received: all simulated · ' : !simulated ? 'Received: all over the drone link · ' : `Received: ${simulated} simulated, ${a.liveReceived} over the drone link · `;
   return <main className="merchant">
     <header className="merchant-top">
-      <Link href="/" className="merchant-back"><ArrowLeft size={18} />Customer app</Link>
+      <a href="/" className="merchant-back"><ArrowLeft size={18} />Customer app</a>
       <h1><Store size={20} />AERO Merchant · Returns desk</h1>
       <div className="merchant-status">
         <span className="merchant-chip demo"><i />Demo merchant view of {scope.whose}</span>
@@ -128,7 +128,7 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
       {!view && !error && <div className="merchant-card merchant-loading" role="status">Loading returns…</div>}
       {a && <>
         <section className="merchant-kpis" aria-label="Returns desk summary">
-          <Kpi icon={<PackageCheck size={15} />} label="Returns received" value={a.received} note={`${receivedSplit}of ${a.total} booked${a.cancelled ? ` · ${a.cancelled} cancelled` : ''}`} />
+          <Kpi icon={<PackageCheck size={15} />} label="Returns received" value={a.received} note={`${receivedSplit}${a.total} booked${a.cancelled ? ` · ${a.cancelled} cancelled` : ''}`} />
           <Kpi icon={<Plane size={15} />} label="In flight" value={a.inFlight} note="Loaded and on the way" />
           <Kpi icon={<UserRound size={15} />} label="Needs a person" value={a.needsPerson} note={a.needsPerson ? 'Waiting for a person' : 'Nothing waiting'} tone={a.needsPerson ? 'warn' : ''} />
           <Kpi icon={<Footprints size={15} />} label="Store trips avoided" tag="Demo" value={a.storeTripsAvoided} note="Assumes one per received return, simulated or live" />
@@ -143,10 +143,10 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
           </div>
         </section>}
         {view.skipped > 0 && <div className="merchant-notice" role="status"><TriangleAlert size={16} /><span>{view.skipped} stored {view.skipped === 1 ? 'return' : 'returns'} could not be read and {view.skipped === 1 ? 'is' : 'are'} not counted.</span></div>}
-        {!a.total ? <section className="merchant-card merchant-empty"><Package size={32} /><h2>No returns yet</h2><p>Book a return in the customer app. It appears here as soon as it is booked, then moves from Booked to Received as the drone brings it to the drop-off.</p><Link href="/" className="ux-primary">Book a return<ArrowRight size={18} /></Link></section> : <>
+        {!a.total ? <section className="merchant-card merchant-empty"><Package size={32} /><h2>No returns yet</h2><p>Book a return in the customer app. It appears here as soon as it is booked, then moves from Booked to Received as the drone brings it to the drop-off.</p><a href="/" className="ux-primary">Book a return<ArrowRight size={18} /></a></section> : <>
           <section className="merchant-card merchant-queue" aria-labelledby="merchant-queue-title">
             <div className="merchant-card-head"><h2 id="merchant-queue-title"><UserRound size={18} />Needs a person</h2><span className={`m-count ${queue.length ? 'warn' : ''}`} aria-live="polite">{queue.length}<span className="m-sr"> {queue.length === 1 ? 'return' : 'returns'} waiting for a person</span></span></div>
-            <p className="m-hint">AERO’s rules send a return to a person when Claude is under {CONFIDENT * 100}% confident, the item may not match its description, it may be damaged or its condition is unclear, or Claude asks for a person’s judgement. Its drone stays on the ground, simulated or live, until someone approves it here. Declining cancels the pickup. Longest-waiting first.</p>
+            <p className="m-hint">AERO’s rules send a return to a person when Claude is under {CONFIDENT * 100}% confident, the item may not match its description, it may be damaged or its condition is unclear, Claude finds it may be outside the drone limits, or Claude asks for a person’s judgement. Its drone stays on the ground, simulated or live, until someone approves it here. Declining cancels the pickup. Longest-waiting first.</p>
             <p className="m-hint m-demo-note"><b className="m-tag">Demo</b> You are the reviewer here, signed in as the customer. A retailer would review from its own staff account.</p>
             {decision && <div className="merchant-notice" role="status"><Check size={16} /><span>{decision}</span></div>}
             {queue.length ? <ol className="merchant-queue-list">{queue.map(r => { const review = r.review!; return <li key={r.id}>
@@ -154,11 +154,13 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
               <p className="m-wait"><UserRound size={14} />{PERSON_WAIT}</p>
               <p className="m-queue-grade">{CONDITION_LABEL[review.condition]} · {confident(review.confidence)} · Suggested: {DISPOSITION_LABEL[review.disposition]}</p>
               <ul className="m-reasons">{needsPersonReasons(review).map(reason => <li key={reason}>{reason}</li>)}</ul>
-              {review.explanation && <p className="m-explain">“{review.explanation}”</p>}
+              {/* Shown in full before Approve/Decline. Claude wrote it before booking and can't change booking details, so it is labelled as its note. */}
+              {review.explanation && <figure className="m-note"><figcaption>Claude’s note from the return check · advisory. Claude can’t change the booking; any setting it mentions is a suggestion.</figcaption><blockquote className="m-explain">“{review.explanation}”</blockquote></figure>}
+              {reviewQuestions(review).length > 0 && <div className="m-questions"><span className="m-label">Claude’s questions to confirm before pickup</span><ul>{reviewQuestions(review).map(q => <li key={q}>{q}</li>)}</ul></div>}
               <span className="m-audit">Checked {clock(review.at, now)} · {review.model} · audit event {review.eventId.slice(0, 8)}</span>
               {onDecide && <div className="m-decide">
-                <button className="m-approve" disabled={!!deciding || stale} onClick={() => onDecide(r, 'approve')}><Check size={16} />{deciding === r.id ? 'Saving…' : 'Approve for drone pickup'}</button>
-                <button className="m-decline" disabled={!!deciding || stale} onClick={() => onDecide(r, 'decline')}><X size={16} />Decline</button>
+                <button className="m-approve" aria-label={`Approve ${r.shortId} for drone pickup`} disabled={!!deciding || stale} onClick={() => onDecide(r, 'approve')}><Check size={16} />{deciding === r.id ? 'Saving…' : 'Approve for drone pickup'}</button>
+                <button className="m-decline" aria-label={`Decline ${r.shortId} for drone pickup`} disabled={!!deciding || stale} onClick={() => onDecide(r, 'decline')}><X size={16} />Decline</button>
               </div>}
             </li>; })}</ol> : <div className="merchant-clear"><ShieldCheck size={18} />No returns are waiting for a person.</div>}
           </section>
@@ -186,7 +188,7 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
         <ul>
           <li><strong>No refunds are issued.</strong> AERO never approves a return, charges or refunds anyone. Refunds stay with your existing returns process.</li>
           <li><strong>Claude grades are advisory.</strong> They come from the customer’s description and any photos before pickup, inside AERO’s fixed drone limits. A “needs a person” return stays on the ground until someone approves or declines it on this desk, and live dispatch from Fleet is blocked until then. Nothing is restocked or rejected automatically.</li>
-          <li><strong>Simulation and live flights are labelled.</strong> Simulated returns follow AERO’s demo flight model; no drone flies. A live flight row ran through the signed drone link from the <Link href="/fleet">Fleet console</Link>. AERO’s record doesn’t show whether a real aircraft or a simulator answered: test missions use scripted acknowledgements or the bridge’s simulated vehicle.</li>
+          <li><strong>Simulation and live flights are labelled.</strong> Simulated returns follow AERO’s demo flight model; no drone flies. A live flight row ran through the signed drone link from the <a href="/fleet">Fleet console</a>. AERO’s record doesn’t show whether a real aircraft or a simulator answered: test missions use scripted acknowledgements or the bridge’s simulated vehicle.</li>
           <li><strong>Demo data.</strong> This view shows the latest {view?.limit ?? 100} returns booked {scope.where}, not a retailer’s account, and no customer addresses. Store trips avoided and time saved are estimates, not measurements. <a href={`${GH}/blob/main/lib/merchant.ts`} target="_blank" rel="noreferrer">How each number is counted<ArrowUpRight size={12} /></a></li>
         </ul>
       </section>

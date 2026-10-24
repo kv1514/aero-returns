@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {DEMO_PACKAGE,type ReturnRecord,type FlightState} from '../lib/simulation';
-type Result={record:ReturnRecord;telemetry:{state:FlightState};user:{name:string};demo:boolean;error?:string};
+type Result={record:ReturnRecord;returns:ReturnRecord[];telemetry:{state:FlightState};user:{name:string};demo:boolean;error?:string};
 const base=process.argv[2]||process.env.AERO_TEST_URL||'http://127.0.0.1:5173';
 const a=new Map<string,string>(),b=new Map<string,string>();
 async function req(jar:Map<string,string>,path:string,method='GET',data?:unknown,origin=base){
@@ -13,6 +13,7 @@ const original=await req(a,'/api/returns','POST',{...DEMO_PACKAGE,returnReferenc
 for(const method of ['POST','DELETE'])assert.equal((await req(a,'/api/account/demo',method,undefined,'https://wrong.example')).status,403);
 const entered=await req(a,'/api/account/demo','POST');assert.equal(entered.status,200);assert.match(entered.headers.get('cache-control')||'',/no-store/);
 assert.equal((await req(a,'/api/account')).data.user.name,'Alex Demo');
+assert.deepEqual((await req(a,'/api/returns')).data.returns,[],'a new demo account starts empty: nothing is booked until Request');
 assert.equal((await req(a,`/api/returns/${original.data.record.id}`)).status,404,'demo cannot read original account');
 const made=await req(a,'/api/returns','POST',{...DEMO_PACKAGE,returnReference:'QA-DEMO-ACCOUNT'});assert.equal(made.status,201);const path=`/api/returns/${made.data.record.id}`;
 await req(b,'/api/account/demo','POST');assert.notEqual(a.get('aero_demo_id'),b.get('aero_demo_id'));
