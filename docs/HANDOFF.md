@@ -22,18 +22,18 @@ The goal is a polished, interactive 3–5 minute Cal Hacks returns demo, with us
 
 Same-tab booking recovery now preserves package details, pickup, return reference and wizard step through closing/reloading. Draft parsing rejects corrupt, expired and out-of-area data. Confirmation consent is not restored. Blank pickup labels are rejected client and server side. Return references appear in review and receipts. `/demo` now includes Google/Amazon readiness and direct GitHub/handoff links. GitHub Actions checks future pushes and pull requests.
 
-Hosted HTTPS browser QA is working. Google map rendering and a nearby UPS search returned 20 real listings around the demo pickup. The local browser URL was previously blocked; do not work around that policy. Mobile layout and a demo recording remain outstanding.
+Hosted HTTPS browser QA is working. Google map rendering, Geocoding v4 address lookup (2180 Milvia St, Berkeley), UPS search (20 listings), and warehouse discovery (one listing within 5 km) were verified on the hosted prototype. The local browser URL was previously blocked; do not work around that policy. Mobile layout and a demo recording remain outstanding.
 
 ## Next work that needs credentials
 
-1. Google’s free Maps Demo Key is now configured in Sites runtime secrets, with no billing enabled. It is limited to testing/evaluation, with daily quotas. Google’s Keys & Credentials screen requires an upgrade to edit restrictions; no upgrade was performed. Keep it free. The legacy JS Geocoder failed with this key, so address/reverse lookup now uses Geocoding API v4. Verify address lookup after publication, plus permission denied, inaccurate location, zero results, and mobile layout. Never commit the key.
+1. Google’s free Maps Demo Key is now configured in Sites runtime secrets, with no billing enabled. It is limited to testing/evaluation, with daily quotas. Google’s Keys & Credentials screen requires an upgrade to edit restrictions; no upgrade was performed. Keep it free. The legacy JS Geocoder failed with this key, so address/reverse lookup now uses Geocoding API v4. Address lookup was verified after publication. Remaining manual checks: reverse geocoding with device permission, permission denied, inaccurate location, zero results, and mobile layout. Never commit the key.
 2. Register Login with Amazon. Set `AMAZON_CLIENT_ID`, server-only `AMAZON_CLIENT_SECRET`, and the exact registered `AMAZON_REDIRECT_URI`. Test success, cancellation, expired/reused state, disconnect, and separate-owner isolation. No Amazon credentials were provided; the live authorization exchange remains unverified.
 3. Add Anthropic and Apify credentials if pursuing those sponsor tracks; record real successful evidence. The Python Actor must be deployed in the team's own Apify account.
 4. Run the end-to-end demo with a human presenter. Confirm location and retailer acceptance language remains honest. Do not expand into real drone controls merely to make a demo look live.
 
 ## Verification at handoff
 
-Typecheck and production build pass. The previous 21 TypeScript tests and four new Geocoding v4 tests cover local behavior. Local HTTP smoke checks pass for the complete booking journey, session isolation, Maps configuration, Amazon missing-setup state, cross-origin rejection, and invalid callback rejection. Browser interaction verified Amazon import opening a prefilled booking and nearby discovery leading to Maps configuration without a key. Real Google Maps rendering and UPS search are verified on the hosted prototype; Amazon authorization remains unverified.
+Typecheck and production build pass. All 25 TypeScript tests pass, including four Geocoding v4 tests for coordinate order, encoding, empty results, quota errors, and malformed data. Local HTTP smoke checks pass for the complete booking journey, session isolation, Maps configuration, Amazon missing-setup state, cross-origin rejection, and invalid callback rejection. Browser interaction verified Amazon import opening a prefilled booking and nearby discovery leading to Maps configuration without a key. Real Google Maps rendering, address lookup, UPS and warehouse search are verified on the hosted prototype; Amazon authorization remains unverified.
 
 ## Code map
 

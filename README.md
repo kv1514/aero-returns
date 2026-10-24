@@ -127,4 +127,4 @@ Add that exact callback to the Amazon app's allowed return URLs. Local testing n
 
 OAuth uses PKCE S256, a one-time ten-minute state tied to the AERO owner and an HttpOnly SameSite cookie, strict request origins, and server-side token exchange. The linked name, email, and Amazon account identifier are stored privately; access and refresh tokens are discarded after profile retrieval. Disconnect removes AERO's profile association and outstanding link attempts. It does not revoke consent at Amazon. Missing credentials disable linking clearly while manual return import stays usable.
 
-Google Maps rendering and UPS search have been verified on the hosted prototype with the free demo key. Amazon sign-in remains unverified without registered app credentials. Passing tests or finding a listing does not establish retailer participation.
+Google Maps rendering, address lookup, UPS and warehouse search have been verified on the hosted prototype with the free demo key. Amazon sign-in remains unverified without registered app credentials. Passing tests or finding a listing does not establish retailer participation.
