@@ -11,3 +11,11 @@ GOOGLE_MAPS_MAP_ID=DEMO_MAP_ID
 AMAZON_CLIENT_ID=
 AMAZON_CLIENT_SECRET=
 AMAZON_REDIRECT_URI=https://aero-returns-kv15.kveldanda10.chatgpt.site/api/amazon/callback
+
+# Supabase Auth (Google + custom:amazon providers configured in Supabase)
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_GOOGLE_ENABLED=false
+SUPABASE_AMAZON_ENABLED=false
+# Set false only for local HTTP development. Hosted HTTPS defaults to Secure cookies.
+SUPABASE_COOKIE_SECURE=false

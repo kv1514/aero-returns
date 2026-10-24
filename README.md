@@ -48,7 +48,7 @@ Deploy the folder as an Actor in your Apify account, build it, and set `APIFY_AC
 
 ### Deliberate scope
 
-This build uses D1, not Convex or Supabase. It uses browser speech, not Cartesia or ElevenLabs. Nessie, Fetch/ASI:One, x402, and physical drone controls are **not implemented**. Merely referencing a sponsor in the research page is not a working integration. The current submission strategy prioritizes useful return workflows instead of unrelated tools. The broader household-drone plan remains a roadmap.
+Return records use D1; optional social sign-in uses Supabase Auth. Convex is not used. It uses browser speech, not Cartesia or ElevenLabs. Nessie, Fetch/ASI:One, x402, and physical drone controls are **not implemented**. Merely referencing a sponsor in the research page is not a working integration. The current submission strategy prioritizes useful return workflows instead of unrelated tools. The broader household-drone plan remains a roadmap.
 
 ## Environment variables
 
@@ -128,3 +128,9 @@ Add that exact callback to the Amazon app's allowed return URLs. Local testing n
 OAuth uses PKCE S256, a one-time ten-minute state tied to the AERO owner and an HttpOnly SameSite cookie, strict request origins, and server-side token exchange. The linked name, email, and Amazon account identifier are stored privately; access and refresh tokens are discarded after profile retrieval. Disconnect removes AERO's profile association and outstanding link attempts. It does not revoke consent at Amazon. Missing credentials disable linking clearly while manual return import stays usable.
 
 Google Maps rendering, address lookup, UPS and warehouse search have been verified on the hosted prototype with the free demo key. Amazon sign-in remains unverified without registered app credentials. Passing tests or finding a listing does not establish retailer participation.
+
+## Earth, Street View, and social accounts
+
+**Earth & Street View** opens a photorealistic Google 3D explorer with pickup, current drone position, and simulated hub camera targets, plus an optional orbit. Google Earth and Street View open at the selected coordinates in separate tabs. Each nearby listing also has these links. Street View uses Google's key-free Maps URLs, so no paid panorama API is enabled. Imagery is recorded and is not live drone footage. Unsupported devices or quota limits show an external-view fallback.
+
+**Your account** includes Supabase-backed Google and Amazon sign-in. Provider buttons remain disabled until configured; no successful live social login is claimed. See [`docs/ACCOUNTS.md`](docs/ACCOUNTS.md) for exact callbacks, the Amazon userinfo adapter, ownership/security behavior, and pending setup. The private Site sharing gate remains separate.

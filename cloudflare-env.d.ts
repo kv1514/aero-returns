@@ -1,6 +1,11 @@
 declare namespace Cloudflare {
   interface Env {
     DB?: D1Database;
+    SUPABASE_URL?: string;
+    SUPABASE_PUBLISHABLE_KEY?: string;
+    SUPABASE_GOOGLE_ENABLED?: string;
+    SUPABASE_AMAZON_ENABLED?: string;
+    SUPABASE_COOKIE_SECURE?: string;
     GOOGLE_MAPS_BROWSER_KEY?: string;
     GOOGLE_MAPS_MAP_ID?: string;
     AMAZON_CLIENT_ID?: string;

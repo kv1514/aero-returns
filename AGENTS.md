@@ -8,8 +8,8 @@ This is a standalone React/Vinext and Cloudflare D1 demo. Read `README.md` for l
 - Preserve explicit package-loading confirmation. Advancing the simulation cannot bypass it.
 - Real Google Places listings are discovery results, not verified participating drone facilities or proof of QR acceptance. Keep them separate from simulated hub routing.
 - Location is opt-in and one-shot. Never add background tracking by default. Keep real booking pickup inside the demo service boundary.
-- Login with Amazon links a profile only. Standard profile scopes do not supply purchase history or create returns. Do not scrape signed-in accounts or collect Amazon passwords. Keep tokens out of persistence and logs.
-- Scope every stored return and linked account to its owner. Preserve origin checks, OAuth state/PKCE, and atomic version checks.
+- The legacy Login with Amazon connection links a profile only; Supabase custom Amazon sign-in authenticates an AERO account. Standard profile scopes do not supply purchase history or create returns. Do not scrape signed-in accounts or collect Amazon passwords. Keep tokens out of persistence and logs.
+- Scope every stored return and linked account to its owner. For Supabase accounts, authorize only using server-verified `getUser()` IDs, never user metadata or an unverified cookie. Keep the private Sites gate intact. Preserve origin checks, OAuth state/PKCE, and atomic version checks.
 - Keep API secrets in ignored `.dev.vars` or hosted runtime variables. A standard Google browser key must be website/API restricted; it is intentionally public to browsers. The owner-approved no-billing Maps Demo Key is an exception for this private prototype: Google limits its APIs and quota, and currently gates custom key settings behind an upgrade. Never attach billing or upgrade it automatically.
 - Do not claim sponsor qualification or live integration verification without actual evidence. `/demo` and `data/hackathon-tracks.json` document the researched tracks and their limits.
 

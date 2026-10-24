@@ -4,7 +4,7 @@ import {session} from './server';
 import {amazonAuthorizeURL,pkceChallenge,validCallback} from './amazon-oauth';
 const configured=()=>!!(env.AMAZON_CLIENT_ID&&env.AMAZON_CLIENT_SECRET&&env.AMAZON_REDIRECT_URI&&validCallback(env.AMAZON_REDIRECT_URI));
 export async function amazonAccount(request:Request){
- const {owner,cookie}=session(request);const headers={'Cache-Control':'no-store',...(cookie?{'Set-Cookie':cookie}:{})};const reply=(data:unknown,status=200)=>Response.json(data,{status,headers});
+ const {owner,cookie}=await session(request);const headers={'Cache-Control':'no-store',...(cookie?{'Set-Cookie':cookie}:{})};const reply=(data:unknown,status=200)=>Response.json(data,{status,headers});
  try{if(!env.DB)return reply({error:'Account storage is unavailable.'},503);
  if(request.method==='GET'){const profile=await env.DB.prepare('SELECT name,email,linked_at FROM amazon_accounts WHERE owner = ?').bind(owner).first<{name:string;email:string;linked_at:number}>();return reply({configured:configured(),connected:!!profile,profile,scope:'profile',ordersAvailable:false});}
  if(request.headers.get('origin')!==new URL(request.url).origin)return reply({error:'Request origin is not allowed.'},403);
@@ -18,7 +18,7 @@ export async function amazonAccount(request:Request){
  }catch{return reply({error:'Could not update the Amazon connection. Try again shortly.'},503);}
 }
 export async function amazonCallback(request:Request){
- const url=new URL(request.url);const {owner}=session(request);
+ const url=new URL(request.url);const {owner}=await session(request);
  const finish=(status:string)=>new Response(null,{status:303,headers:{Location:new URL('/?amazon='+status,url.origin).href,'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':`aero_amazon_state=; Path=/api/amazon; HttpOnly; SameSite=Lax; Max-Age=0${url.protocol==='https:'?'; Secure':''}`}});
  try{if(!env.DB||!configured())return finish('setup');const state=url.searchParams.get('state'),cookie=request.headers.get('cookie')?.match(/(?:^|;\s*)aero_amazon_state=([a-f0-9-]{36})(?:;|$)/)?.[1];
  if(!state||state!==cookie||state.length!==36)return finish('invalid');

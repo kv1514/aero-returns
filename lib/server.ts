@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { z } from 'zod';
+import {verifiedAccount} from './supabase-server';
 import { control, createReturn, settle, snapshot, type ReturnRecord } from './simulation';
 const packageSchema = z.object({
   retailer: z.enum(['Amazon', 'Nike', 'Zara', 'Other']), method: z.enum(['qr', 'label']),
@@ -8,7 +9,9 @@ const packageSchema = z.object({
   instructions: z.string().max(500), service: z.enum(['standard', 'priority']), returnReference: z.string().max(150).optional(),
 });
 const actionSchema = z.object({ action: z.enum(['load','pause','resume','advance','reset','cancel','speed','fail','retry']), rate: z.number().optional() });
-export function session(request: Request) {
+export async function session(request: Request) {
+  const account=await verifiedAccount();
+  if(account)return {owner:account.owner,cookie:''};
   const user = request.headers.get('oai-authenticated-user-id');
   if (user) return { owner: `user:${user}`, cookie: '' };
   const cookie = request.headers.get('cookie')?.match(/(?:^|;\s*)aero_session=([a-f0-9-]{36})(?:;|$)/)?.[1];
@@ -16,7 +19,9 @@ export function session(request: Request) {
   return { owner: `guest:${token}`, cookie: cookie ? '' : `aero_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}` };
 }
 export async function handle(request: Request, id?: string): Promise<Response> {
-  const { owner, cookie } = session(request);
+  let identity:Awaited<ReturnType<typeof session>>;
+  try{identity=await session(request);}catch{return Response.json({error:'Your account session expired or is unavailable. Open Your account to sign in again.'},{status:401,headers:{'Cache-Control':'private, no-store'}});}
+  const {owner,cookie}=identity;
   const reply = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', ...(cookie ? { 'Set-Cookie': cookie } : {}) } });
   try {
     const db = env.DB; if (!db) return reply({ error: 'Demo storage is unavailable. Please try again shortly.' }, 503);

@@ -7,7 +7,7 @@ export async function integrationRequest(request:Request,kind:'lookup'|'review')
   const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
   try{
     const origin=request.headers.get('origin');if(!origin||origin!==new URL(request.url).origin)return reply({error:'Use the AERO app to start this request.'},403);
-    const {owner,cookie}=session(request);if(cookie)return reply({error:'Open AERO first to start your private demo session.'},401);
+    const {owner,cookie}=await session(request);if(cookie)return reply({error:'Open AERO first to start your private demo session.'},401);
     if(!env.DB)return reply({error:'Storage unavailable.'},503);
     const text=await request.text();if(text.length>(kind==='review'?6500000:4000))return reply({error:'Request is too large. Use photos below 1 MB each.'},413);
     const raw=JSON.parse(text);

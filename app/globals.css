@@ -37,3 +37,10 @@ body[data-theme='dark'] .return-tools button,body[data-theme='dark'] .amazon-pro
 .draft-notice button{flex-shrink:0}
 .readiness-grid article>a{display:flex;align-items:center;gap:6px;margin-top:12px;font-size:13px;color:var(--blue,#315be8)}
 @media(max-width:600px){.draft-notice{align-items:flex-start;gap:8px}.draft-notice p{font-size:11px}}
+
+/* Geographic inspection and optional social account controls. */
+.earth-entry{position:absolute;z-index:5;right:24px;top:100px;display:flex;align-items:center;gap:8px;padding:12px 16px;border:1px solid var(--line);border-radius:24px;background:var(--panel,#fff);color:var(--ink);box-shadow:0 4px 20px #12234412;font-size:12px;font-weight:600}
+.earth-explorer{padding:24px}.earth-targets,.earth-links{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.earth-targets button{flex:1;white-space:nowrap}.earth-viewport{height:390px;width:100%;border-radius:18px;overflow:hidden;background:#dfe6ee}.earth-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;font-size:12px;color:var(--muted)}.earth-status button{flex-shrink:0}.earth-links a{text-decoration:none;flex:1}.account-symbol{display:inline-flex;padding:18px;color:#2756ca;background:#edf3ff;border-radius:20px;margin-bottom:12px}.account-panel h3{font-size:24px;margin:8px 0 14px}.account-panel>.full{margin-top:12px}.account-panel>.fine-print{margin:10px 0}.nearby-links{flex-wrap:wrap}
+@media(max-width:760px){.earth-entry{right:14px;top:74px;font-size:11px;padding:10px 12px}.earth-explorer{padding:16px}.earth-viewport{height:330px}.earth-targets{gap:5px}.earth-targets button{font-size:11px;padding:10px 7px}.earth-status{align-items:flex-start;flex-direction:column}.earth-links a{font-size:12px;min-width:160px}}
+
+body[data-theme='dark'] .earth-entry{background:#1c2b3e;color:#e3eaf5}body[data-theme='dark'] .account-symbol{background:#22334a;color:#9ab7ff}

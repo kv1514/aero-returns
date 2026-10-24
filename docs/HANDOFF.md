@@ -47,3 +47,9 @@ Typecheck and production build pass. All 25 TypeScript tests pass, including fou
 - `data/hackathon-tracks.json`, `components/demo-room.tsx`: research and presentation.
 
 The original checkout is `/Users/kv15/Documents/ChatGPT/arbitradge/sites/aero`; it is its own Git repository. Build output, local database, uploaded local files, provider credentials, and dependencies are intentionally excluded from source control.
+
+## Earth and social account update
+
+- Added Google photorealistic 3D explorer, target camera controls, orbit, Google Earth and key-free Street View links (including nearby listings).
+- Added pinned Supabase Auth SDK, server-side PKCE flow, verified identity ownership, no-store account routes, and account UI. Live setup is pending organization choice; see `docs/ACCOUNTS.md`. Return persistence remains D1.
+- Supabase-backed Google/Amazon sign-in is not live until provider credentials/configuration are supplied and verified. The user declined using the connected SideSpace organization; another organization has not yet been identified.

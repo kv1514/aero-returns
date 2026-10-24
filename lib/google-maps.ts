@@ -9,6 +9,7 @@ export interface GBounds{extend(p:{lat:number;lng:number}):GBounds;}
 export interface GMarker extends HTMLElement{map:GMap|null;position:{lat:number;lng:number}|GLocation|null;}
 export interface GLine{setPath(path:{lat:number;lng:number}[]):void;setMap(map:GMap|null):void;}
 export interface GoogleSDK{
+ importLibrary(name:string):Promise<unknown>;
  Map:new(el:HTMLElement,options:Record<string,unknown>)=>GMap;
  LatLngBounds:new()=>GBounds;
  Polyline:new(options:Record<string,unknown>)=>GLine;
