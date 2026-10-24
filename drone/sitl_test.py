@@ -181,7 +181,7 @@ def main() -> int:
         env = dict(os.environ,
                    AERO_DRONE_ID=stub_server.TEST_DRONE_ID, AERO_DRONE_KEY=stub_server.TEST_DRONE_KEY,
                    AERO_SERVER=srv.url, AERO_CONNECT=connect, AERO_LIVE="1",
-                   AERO_FENCE_CENTER=f"{home[0]},{home[1]}", AERO_FENCE_RADIUS="500",
+                   AERO_FENCE_CENTER="auto", AERO_FENCE_RADIUS="500",  # auto = the launcher waits for SITL's fix
                    AERO_CRUISE_ALT=str(args.alt), AERO_MAX_ALT="60", AERO_BATTERY_FLOOR="30",
                    AERO_LINK_TIMEOUT="20", AERO_STATE_FILE=str(tmp / "state.json"), AERO_BIND="",
                    PYTHONUNBUFFERED="1")

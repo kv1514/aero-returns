@@ -148,6 +148,80 @@ class PinningTest(unittest.TestCase):
             srv.server_close()
 
 
+class LinkChoiceTest(unittest.TestCase):
+    SERVER = "https://app.example"
+
+    def test_no_bind_means_default_route(self):
+        self.assertEqual(run_bridge.choose_link("", self.SERVER, None), (None, "app link on the default route"))
+
+    def test_pinned_when_the_app_answers_through_it(self):
+        opener = object()
+        got, how = run_bridge.choose_link("nm:lte-dongle", self.SERVER, "64:ff9b::", resolve=lambda b: "enx1",
+                                          build=lambda i, p: opener, check=lambda url, o: None)
+        self.assertIs(got, opener)
+        self.assertIn("pinned to enx1", how)
+
+    def test_dongle_down_falls_back_to_default_route(self):
+        def resolve(_b):
+            raise SystemExit("[run_bridge] NetworkManager connection 'lte-dongle' is not active; is the 4G dongle up?")
+        got, how = run_bridge.choose_link("nm:lte-dongle", self.SERVER, None, resolve=resolve)
+        self.assertIsNone(got)
+        self.assertIn("not active", how); self.assertIn("default route", how)
+        with self.assertRaises(SystemExit):
+            run_bridge.choose_link("nm:lte-dongle", self.SERVER, None, resolve=resolve, strict=True)
+
+    def test_dead_sim_falls_back_when_default_route_works(self):
+        answers = iter(["timed out", None])  # pinned probe fails, default-route probe succeeds
+        got, how = run_bridge.choose_link("enx1", self.SERVER, None, build=lambda i, p: object(),
+                                          check=lambda url, o: next(answers))
+        self.assertIsNone(got)
+        self.assertIn("out of data", how)
+
+    def test_stays_pinned_when_nothing_works(self):
+        opener = object()
+        got, how = run_bridge.choose_link("enx1", self.SERVER, None, build=lambda i, p: opener,
+                                          check=lambda url, o: "no route")
+        self.assertIs(got, opener)
+        self.assertIn("keeps retrying", how)
+
+
+class GpsPositionTest(unittest.TestCase):
+    class Msg:
+        def __init__(self, kind, **fields):
+            self.kind = kind; self.__dict__.update(fields)
+        def get_type(self): return self.kind
+        def get_srcSystem(self): return 1
+        def get_srcComponent(self): return 1
+
+    class Conn:
+        def __init__(self, msgs):
+            self.msgs = list(msgs); self.closed = False
+            self.mav = mock.Mock()
+        def recv_match(self, **kw):
+            return self.msgs.pop(0) if self.msgs else None
+        def close(self): self.closed = True
+
+    def test_waits_for_fix_and_satellites_then_returns_position(self):
+        M = self.Msg
+        conn = self.Conn([M("HEARTBEAT"), M("GPS_RAW_INT", fix_type=1, satellites_visible=0),
+                          M("GLOBAL_POSITION_INT", lat=378719000, lon=-1222585000),
+                          M("GPS_RAW_INT", fix_type=3, satellites_visible=5),
+                          M("GPS_RAW_INT", fix_type=3, satellites_visible=8)])
+        logs = []
+        pos = run_bridge.gps_position("/dev/ttyACM0", connection_factory=lambda: conn, log=logs.append)
+        self.assertEqual(pos, (37.8719, -122.2585))
+        self.assertTrue(conn.closed)
+        self.assertEqual(conn.mav.request_data_stream_send.call_count, 2)  # status + position streams
+        self.assertTrue(any("waiting for GPS" in l for l in logs))
+
+    def test_timeout_is_loud_and_streams_are_requested_through_mavros_too(self):
+        conn = self.Conn([self.Msg("HEARTBEAT")])
+        with self.assertRaisesRegex(SystemExit, "no usable GPS fix"):
+            run_bridge.gps_position("tcp:127.0.0.1:5770", connection_factory=lambda: conn, timeout_s=0.01, log=lambda m: None)
+        self.assertEqual(conn.mav.request_data_stream_send.call_count, 2)
+        self.assertTrue(conn.closed)
+
+
 class StubServerTest(unittest.TestCase):
     def setUp(self):
         self.link = stub_server.Link(DRONE, KEY, expiry_s=30)

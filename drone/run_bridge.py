@@ -29,6 +29,15 @@ Link to the app (AERO_BIND, default empty):
   start. Through this dongle only IPv6 works (the modem's IPv4 NAT passes
   nothing), so pinned connections try IPv6 first and reach IPv4-only hosts
   through the carrier's NAT64 (well-known prefix 64:ff9b::/96, verified).
+* The pin is checked before the bridge starts: if the dongle is down or the
+  app does not answer through it but does answer on the default route
+  (Wi-Fi / a phone hotspot), the launcher says so loudly and uses the default
+  route, so a dead SIM does not stop a demo. ``AERO_BIND_STRICT=1`` turns
+  that fallback off.
+
+Geofence (AERO_FENCE_CENTER): ``lat,lon`` or ``auto``, which waits for the
+flight controller's first 3D fix with 6+ satellites and centres the fence on
+the drone's position at service start (the launch pad).
 """
 
 from __future__ import annotations
@@ -41,6 +50,8 @@ import shlex
 import socket
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -172,9 +183,9 @@ class PinnedHTTPSConnection(http.client.HTTPSConnection):
         self.sock = ctx.wrap_socket(sock, server_hostname=host)
 
 
-def install_pinned_opener(interface: str, nat64_prefix: Optional[str]) -> None:
-    """Make every urllib.request.urlopen (the bridge's HTTPS transport) leave
-    through ``interface``. pymavlink's loopback TCP to MAVROS is untouched."""
+def build_pinned_opener(interface: str, nat64_prefix: Optional[str]) -> urllib.request.OpenerDirector:
+    """An opener whose HTTPS connections leave through ``interface``.
+    pymavlink's loopback TCP to MAVROS is untouched."""
     conn_cls = type("PinnedHTTPSConnection", (PinnedHTTPSConnection,),
                     {"interface": interface, "nat64_prefix": nat64_prefix})
 
@@ -182,7 +193,105 @@ def install_pinned_opener(interface: str, nat64_prefix: Optional[str]) -> None:
         def https_open(self, req):
             return self.do_open(conn_cls, req, context=self._context)
 
-    urllib.request.install_opener(urllib.request.build_opener(Handler()))
+    return urllib.request.build_opener(Handler())
+
+
+def install_pinned_opener(interface: str, nat64_prefix: Optional[str]) -> None:
+    """Make every urllib.request.urlopen (the bridge's HTTPS transport) leave
+    through ``interface``."""
+    urllib.request.install_opener(build_pinned_opener(interface, nat64_prefix))
+
+
+def probe(url: str, opener: urllib.request.OpenerDirector, timeout: float = 12.0) -> Optional[str]:
+    """None if ``url`` answers through ``opener`` (any HTTP status counts: Cloudflare
+    returns 403 to urllib's default user agent, 401 to an unsigned drone line),
+    else a one-line reason."""
+    req = urllib.request.Request(url, headers={"User-Agent": "aero-bridge-launcher/1"})
+    try:
+        with opener.open(req, timeout=timeout) as resp:
+            resp.read(64)
+        return None
+    except urllib.error.HTTPError:
+        return None
+    except Exception as e:  # noqa: BLE001 — any failure means "not this way"
+        return " ".join(str(e).split()) or type(e).__name__
+
+
+def choose_link(bind: str, server: str, nat64_prefix: Optional[str], *, strict: bool = False,
+                resolve=resolve_interface, build=build_pinned_opener, check=probe):
+    """Decide how the bridge reaches the app: (opener to install or None, what to log).
+
+    A pinned link is only used when the app actually answers through it; when
+    it does not but the default route works (Wi-Fi, a phone hotspot), the
+    default route is used instead so a dead SIM does not stop a demo."""
+    bind = (bind or "").strip()
+    if not bind:
+        return None, "app link on the default route"
+    try:
+        iface = resolve(bind)
+    except SystemExit as e:
+        if strict:
+            raise
+        return None, f"WARNING: {str(e).replace('[run_bridge] ', '')} — using the default route instead"
+    opener = build(iface, nat64_prefix)
+    url = server.rstrip("/") + "/"
+    err = check(url, opener)
+    if err is None:
+        return opener, f"app link pinned to {iface} ({bind}); IPv6 first, NAT64 prefix {nat64_prefix or 'off'}"
+    if strict:
+        raise SystemExit(f"[run_bridge] {server} does not answer through {iface}: {err}")
+    if check(url, urllib.request.build_opener()) is None:
+        return None, (f"WARNING: {server} does not answer through {iface} ({err}) but does on the "
+                      "default route — using the default route (Wi-Fi/hotspot). Is the SIM out of data?")
+    return opener, (f"WARNING: {server} answers neither through {iface} ({err}) nor on the default "
+                    f"route; staying pinned to {iface}, the bridge keeps retrying")
+
+
+# --- geofence centre from the FC's GPS ---------------------------------------
+
+def gps_position(connect: str, baud: Optional[int] = None, *, timeout_s: float = 3600.0,
+                 min_fix: int = 3, min_sats: int = 6, connection_factory=None, log=say):
+    """Block until the flight controller reports a 3D fix with enough
+    satellites, then return its (lat, lon). Used for AERO_FENCE_CENTER=auto."""
+    if connection_factory is None:
+        os.environ.setdefault("MAVLINK20", "1")
+        from pymavlink import mavutil
+        connection_factory = lambda: mavutil.mavlink_connection(  # noqa: E731
+            connect, baud=baud or 115200, source_system=255, source_component=190)
+    m = connection_factory()
+    deadline = time.monotonic() + timeout_s
+    next_log = 0.0
+    next_request = 0.0
+    fix = sats = 0
+    pos = None
+    try:
+        while time.monotonic() < deadline:
+            msg = m.recv_match(type=["HEARTBEAT", "GPS_RAW_INT", "GLOBAL_POSITION_INT"],
+                               blocking=True, timeout=2.0)
+            now = time.monotonic()
+            if msg is not None:
+                kind = msg.get_type()
+                if kind == "HEARTBEAT" and msg.get_srcComponent() == 1 and now >= next_request:
+                    # Nobody has asked the FC for GPS yet (the bridge does so later): EXTENDED_STATUS
+                    # (GPS_RAW_INT) and POSITION (GLOBAL_POSITION_INT) at 2 Hz, repeated until data flows.
+                    for stream_id in (2, 6):
+                        m.mav.request_data_stream_send(msg.get_srcSystem(), 1, stream_id, 2, 1)
+                    next_request = now + 5.0
+                elif kind == "GPS_RAW_INT":
+                    fix, sats = msg.fix_type, msg.satellites_visible
+                elif kind == "GLOBAL_POSITION_INT" and (msg.lat or msg.lon):
+                    pos = (msg.lat / 1e7, msg.lon / 1e7)
+                if fix >= min_fix and sats >= min_sats and pos is not None:
+                    return pos
+            if now >= next_log:
+                log(f"waiting for GPS: fix type {fix}, {sats} satellites (need {min_fix}/{min_sats})")
+                next_log = now + 10.0
+    finally:
+        try:
+            m.close()
+        except Exception:  # noqa: BLE001
+            pass
+    raise SystemExit(f"[run_bridge] no usable GPS fix after {timeout_s:.0f} s (fix {fix}, {sats} sats)")
 
 
 # --- bridge command line -----------------------------------------------------
@@ -225,14 +334,20 @@ def main() -> int:
                              "use the MAVROS bridge (AERO_CONNECT=auto with aircart-ros2 running) "
                              "or stop the other reader.")
     say(f"flight controller: {connect}" + (" (through MAVROS's router)" if connect == MAVROS_BRIDGE else ""))
-    bind = env.get("AERO_BIND", "").strip()
-    if bind:
-        iface = resolve_interface(bind)
-        prefix = env.get("AERO_NAT64_PREFIX", DEFAULT_NAT64_PREFIX).strip() or None
-        install_pinned_opener(iface, prefix)
-        say(f"app link pinned to {iface} ({bind}); IPv6 first, NAT64 prefix {prefix or 'off'}")
-    else:
-        say("app link on the default route")
+    env = dict(env)
+    server = env.get("AERO_SERVER", "").strip()
+    prefix = env.get("AERO_NAT64_PREFIX", DEFAULT_NAT64_PREFIX).strip() or None
+    opener, how = choose_link(env.get("AERO_BIND", ""), server, prefix,
+                              strict=truthy(env.get("AERO_BIND_STRICT")))
+    if opener is not None:
+        urllib.request.install_opener(opener)
+    say(how)
+    if env.get("AERO_FENCE_CENTER", "").strip().lower() == "auto":
+        say("AERO_FENCE_CENTER=auto: centring the geofence on the drone's GPS position (waiting for a fix)")
+        baud = int(env["AERO_BAUD"]) if env.get("AERO_BAUD", "").strip() else None
+        lat, lon = gps_position(connect, baud)
+        env["AERO_FENCE_CENTER"] = f"{lat:.7f},{lon:.7f}"
+        say(f"geofence centre from GPS: {env['AERO_FENCE_CENTER']}, radius {env.get('AERO_FENCE_RADIUS', '?')} m")
     argv = build_argv(env, connect)
     if "--live" not in argv:
         say("DRY RUN (AERO_LIVE is not set): the bridge reports telemetry but refuses every movement command")

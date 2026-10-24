@@ -35,6 +35,7 @@ override authority.
 | `bridge.env.example` | Every setting, with the drone's values. Installed as `/etc/aero/bridge.env` |
 | `aero-bridge.service` | systemd unit template (`install.sh` fills in the user and checkout path) |
 | `install.sh` | `sudo bash drone/install.sh` — installs the unit and the env file. Idempotent |
+| `lte_routing.sh` | one-time root setup: dongle reachable only by bound sockets, hidden from ModemManager, named `lte0` (see *The 4G link*) |
 | `check.sh` | Health check: config, service, MAVROS port, FC device, NTP, app reachable through the dongle, last log lines |
 | `stub_server.py` | A stand-in for the app's `/api/drone/link` (real signed protocol) plus a tiny control API, for tests and for driving the drone from a laptop without the app |
 | `sitl_test.py` | End-to-end proof on ArduCopter SITL: TAKEOFF → GOTO → LAND through the real bridge, the real protocol and a MAVROS router, like on the drone |
@@ -61,17 +62,19 @@ Fleet shows the drone id and the 64-character key. Put them in the env file
 and restart:
 
 ```sh
-sudoedit /etc/aero/bridge.env         # AERO_DRONE_ID, AERO_DRONE_KEY, AERO_FENCE_CENTER = the Fleet home pad
+sudoedit /etc/aero/bridge.env         # paste AERO_DRONE_ID and AERO_DRONE_KEY from Fleet; the rest can stay
 sudo systemctl restart aero-bridge
 bash drone/check.sh                   # everything green?
 journalctl -u aero-bridge -f          # "connected to ARDUPILOT autopilot (system 1, component 1)" + state lines
 ```
 
-Fleet should show fresh telemetry within a few seconds. With `AERO_LIVE`
-unset the service is a **dry run**: it reports telemetry and answers every
-movement command with `REJECTED DRY_RUN` (or `NO_GPS` indoors) — use that
-for every bench session. Set `AERO_LIVE=1` and restart only in the field,
-props on, pilot ready, after the checklist below.
+Fleet should show fresh telemetry within a few seconds. The installed
+`bridge.env` is **live** (`AERO_LIVE=1`): the drone arms and flies when the
+app dispatches to it, which the app only does for a drone a person armed in
+Fleet's checklist, with a 3D fix, 6+ satellites and 40 %+ battery, so on an
+indoor bench nothing can fly (`REJECTED NO_GPS`). For bench sessions with a
+GPS fix set `AERO_LIVE=` (dry run: every movement command is
+`REJECTED DRY_RUN`) and restart.
 
 ### Bench test without the app
 
@@ -81,7 +84,7 @@ exercised on the bench (or from a laptop on the same LAN) with no account:
 ```sh
 export AERO_DRONE_ID=aircart01 AERO_DRONE_KEY=8f1e6a2c0d4b7e9f3a5c1b2d4e6f8a0c1d3e5f7a9b0c2d4e6f8a1b3c5d7e9f0a
 python3 drone/stub_server.py serve --port 8480 &
-AERO_SERVER=http://127.0.0.1:8480 AERO_FENCE_CENTER=37.8719,-122.2585 AERO_FENCE_RADIUS=300 \
+AERO_SERVER=http://127.0.0.1:8480 AERO_FENCE_CENTER=auto AERO_FENCE_RADIUS=500 \
   AERO_STATE_FILE=/tmp/aero-bench.json python3 drone/run_bridge.py &
 python3 drone/stub_server.py send PING          # -> seq 1
 python3 drone/stub_server.py wait 1             # {"status": "DONE"}
@@ -98,20 +101,41 @@ on the bench.
 
 ## The 4G link
 
-- The dongle is the NetworkManager connection **`lte-dongle`** (RNDIS
-  interface `enx…`, a different name after every modem boot — hence
-  `AERO_BIND=nm:lte-dongle`, resolved at start). Wi-Fi has the lower route
-  metric, so with Wi-Fi up the default route is Wi-Fi; in the field the
-  dongle is the only route and `AERO_BIND` changes nothing.
+- The dongle is the NetworkManager connection **`lte-dongle`**. After
+  `sudo bash drone/lte_routing.sh` (one-time, root) its interface is always
+  `lte0`; before that it is a MAC-derived `enx…` that changes every modem
+  boot. `AERO_BIND=nm:lte-dongle` resolves the device at start either way.
+- **The dongle is for the bridge only.** Most Wi-Fi networks have no IPv6, so
+  the dongle used to be the Jetson's only IPv6 default route and every
+  dual-stack host (Claude Code, Firefox, apt, …) silently went out over 4G:
+  56 MB in one afternoon on 24 Oct, on a plan sized for ~1 KB/s of command
+  traffic, after which the carrier stopped passing packets. The Tegra kernel
+  has no IPv6 policy routing (`CONFIG_IPV6_MULTIPLE_TABLES` unset), so
+  `lte_routing.sh` gives `lte-dongle` an `unreachable ::/0` route with a lower
+  metric than its own default and no IPv4 default at all. Unbound sockets hit
+  the unreachable route and fall back to IPv4 over Wi-Fi; sockets bound to
+  the dongle (`SO_BINDTODEVICE` in `run_bridge.py`, `curl --interface lte0`,
+  `ssh -o BindInterface=lte0`) do a strict per-interface lookup, skip it and
+  use the real gateway. `check.sh` prints `LEAK` if an unbound lookup still
+  picks the dongle and counts the connections going through it.
+- The same script hides the modem from ModemManager. Otherwise, after a modem
+  reboot ModemManager claims it, NetworkManager drops the RNDIS interface as
+  "removed", and `lte-dongle` does not come back without a replug.
 - Through the dongle **only IPv6 passes**: the carrier gives a public IPv6
   prefix and the modem's IPv4 NAT passes nothing (measured: every IPv4
   connection times out). IPv4-only hosts are reached through the carrier's
   **DNS64/NAT64** (well-known prefix `64:ff9b::/96`, verified). The app is on
-  Cloudflare and dual-stack: `curl -6 --interface <enx…> https://aero-returns.kv15.workers.dev/`
+  Cloudflare and dual-stack: `curl -6 --interface lte0 https://aero-returns.kv15.workers.dev/`
   answers in ~0.5 s. `run_bridge.py` tries IPv6 first and synthesises the
   NAT64 address itself when a host has no AAAA record.
+- Data budget: the bridge polls once a second and `urllib` opens a new TLS
+  connection per poll, so count on roughly 15-20 MB per flight hour
+  (estimate, not measured) on top of the ~1 KB/s of payload. Check the SIM's
+  remaining data before a demo; the symptom of an exhausted plan is a modem
+  that registers and gets addresses but answers nothing (`check.sh`: "app not
+  reachable").
 - The SIM is behind carrier NAT. Nothing connects *to* the drone; the bridge
-  polls the app once a second (the protocol's design), ~1 KB/s.
+  polls the app once a second (the protocol's design).
 - Link-loss behaviour is the bridge's: after `AERO_LINK_TIMEOUT` (20 s) with
   no successful exchange while airborne it HOLDs, after twice that it RTLs.
   A 4G hiccup longer than 20 s therefore pauses the flight; the operator
@@ -189,9 +213,10 @@ In addition to the bridge's own pre-flight checklist in
    NTP synced, dongle reaches the app.
 2. Fleet shows fresh telemetry: 3D fix, ≥ 6 satellites, battery ≥ 40 %,
    state `IDLE`, mode as the pilot left it.
-3. `/etc/aero/bridge.env`: `AERO_FENCE_CENTER` is the real launch pad and the
-   Fleet home pad; `AERO_LIVE=1`; restart the service and watch
-   `journalctl -u aero-bridge -f` say `LIVE`.
+3. `/etc/aero/bridge.env`: `AERO_FENCE_CENTER=auto` (the fence is centred on
+   the launch pad when the service starts; restart it after moving the drone
+   somewhere else) and `AERO_LIVE=1`; `journalctl -u aero-bridge -f` must show
+   `geofence centre from GPS` and not `DRY RUN`.
 4. FC parameters above applied; props on; RC transmitter on; pilot ready to
    switch modes (the bridge then logs `MODE_CHANGED` and stops commanding).
 5. Fleet: complete the arming checklist (30-minute window), dispatch the

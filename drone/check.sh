@@ -27,6 +27,20 @@ if [ -n "$dev" ]; then
 else
     echo "lte-dongle connection is down"; fail=1
 fi
+echo -n "4G policy:    "
+if [ -n "$dev" ]; then
+    if ip -6 route show default | grep -q '^unreachable' && ip -6 route show default | grep -q "dev $dev"; then
+        case "$(ip -6 route get 2606:4700:4700::1111 2>&1 | head -1)" in
+            *"dev $dev"*) echo "LEAK: unbound IPv6 traffic goes out the dongle (run: sudo bash drone/lte_routing.sh)"; fail=1;;
+            *) echo "dongle reachable only by sockets bound to $dev";;
+        esac
+    else
+        echo "shadow route missing: the whole Jetson may use the dongle (run: sudo bash drone/lte_routing.sh)"; fail=1
+    fi
+    pfx=$(ip -6 -o addr show dev "$dev" scope global 2>/dev/null | awk '{print $4}' | cut -d: -f1-4 | head -1)
+    n=$(ss -tnH state established 2>/dev/null | awk -v p="$pfx" 'p!="" && index($3,"["p)==1' | wc -l)
+    echo "4G sockets:   $n established connections through the dongle"
+fi
 echo "bridge log (last 6 lines):"
 journalctl -u aero-bridge -n 6 --no-pager -o cat 2>/dev/null | sed 's/^/    /' || echo "    (no journal access)"
 [ $fail = 0 ] && echo "OK" || echo "PROBLEMS"
