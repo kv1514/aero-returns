@@ -1,8 +1,9 @@
 /** HTTP checks for the live drone API against a running local app: node_modules/.bin/tsx scripts/drone-smoke.ts */
 import assert from 'node:assert/strict';
-import type { DroneView, Telemetry } from '../lib/drone-protocol';
+import type { DroneView, FlyRoute, Telemetry } from '../lib/drone-protocol';
+import type { DeliveryJob } from '../lib/drone-jobs';
 const base = process.env.AERO_TEST_URL || 'http://127.0.0.1:5173';
-type Reply = { status: number; data: { drone: DroneView; drones: DroneView[]; token: string; command: { id: string; type: string } | null; config: { home: [number, number] | null }; text: string; sent: boolean; error?: string } };
+type Reply = { status: number; data: { drone: DroneView; drones: DroneView[]; token: string; command: { id: string; type: string; params: FlyRoute | null } | null; config: { home: [number, number] | null }; text: string; sent: boolean; job: DeliveryJob; jobs: { droneId: string; job: DeliveryJob }[]; error?: string } };
 function client() {
   let cookie = '';
   return async (path: string, method = 'GET', data?: unknown, headers: Record<string, string> = {}): Promise<Reply> => {
@@ -14,7 +15,7 @@ function client() {
 const owner = client(), stranger = client(), friend = client();
 const home: [number, number] = [-122.2585, 37.8719];
 const north = (m: number): [number, number] => [home[0], home[1] + m / 111195];
-const telemetry = (over: Partial<Telemetry> = {}): Telemetry => ({ lat: home[1], lng: home[0], altM: 0, headingDeg: 0, groundSpeedMs: 0, batteryPct: 95, gpsFix: 3, satellites: 12, armed: false, mode: 'GUIDED', state: 'landed', flightAllowed: true, link: '4g', simulated: true, ...over });
+const telemetry = (over: Partial<Telemetry> = {}): Telemetry => ({ lat: home[1], lng: home[0], altM: 0, headingDeg: 0, groundSpeedMs: 0, batteryPct: 95, gpsFix: 3, satellites: 12, armed: false, mode: 'GUIDED', state: 'landed', flightAllowed: true, link: '4g', simulated: true, payload: 'unknown', ...over });
 
 await owner('/api/drones'); await stranger('/api/drones'); await friend('/api/drones');
 const created = await owner('/api/drones', 'POST', { name: 'Smoke Quad' });
@@ -72,6 +73,51 @@ const sms = await owner(`${path}/sms`, 'POST', { command: 'LAND' });
 assert.equal(sms.status, 200); assert.match(sms.data.text, /^AERO LAND \d{8}$/); assert.equal(sms.data.sent, false);
 assert.equal((await owner(path, 'PATCH', { phone: '555' })).status, 400);
 assert.equal((await owner(path, 'PATCH', { phone: '+14155550123', geofenceM: 800, maxAltM: 60 })).data.drone.geofenceM, 800);
+
+// Delivery job: pickup leg → person confirms loading → drop-off leg with release → return home, driven only by device acks.
+await sync([], { batteryPct: 95 });
+const pick = north(100), drop = north(300), jobs = `${path}/jobs`;
+assert.equal((await owner(jobs, 'POST', { op: 'create', pickup: pick, dropoff: drop, altM: 30 })).status, 400, 'deliveries need pilot confirmation');
+assert.equal((await owner(jobs, 'POST', { op: 'create', pickup: pick, dropoff: north(1200), altM: 30, pilotReady: true })).status, 409, 'drop-off outside the safety zone');
+let job = await owner(jobs, 'POST', { op: 'create', pickup: pick, dropoff: drop, altM: 30, pilotReady: true, returnId: 'smoke-return' });
+assert.equal(job.status, 201, JSON.stringify(job.data)); assert.equal(job.data.job.status, 'dispatched');
+const jobId = job.data.job.id;
+assert.equal((await owner(jobs, 'POST', { op: 'create', pickup: pick, dropoff: drop, altM: 30, pilotReady: true })).status, 409, 'one delivery at a time');
+assert.equal((await owner(jobs, 'POST', { op: 'loaded', jobId })).status, 409, 'cannot load before landing at the pickup');
+s = await sync();
+assert.equal(s.data.command?.type, 'FLY_ROUTE'); assert.deepEqual(s.data.command?.params?.waypoints, [pick]); assert.equal(s.data.command?.params?.release, false);
+const pickLeg = s.data.command!.id;
+await sync([{ commandId: pickLeg, status: 'accepted' }]);
+assert.equal((await owner(path)).data.drone.job?.status, 'en_route_pickup');
+await sync([{ commandId: pickLeg, status: 'done', message: 'Landed.' }]);
+view = (await owner(path)).data.drone;
+assert.equal(view.job?.status, 'at_pickup'); assert.ok(view.events.some(e => e.kind === 'job' && e.title === 'Arrived at pickup'));
+assert.equal((await sync()).data.command, null, 'the drone waits at the pickup until loading is confirmed');
+job = await owner(jobs, 'POST', { op: 'loaded', jobId });
+assert.equal(job.status, 201); assert.equal(job.data.job.status, 'package_loaded');
+s = await sync();
+assert.deepEqual(s.data.command?.params?.waypoints, [drop]); assert.equal(s.data.command?.params?.release, true, 'drop-off leg releases the package');
+const dropLeg = s.data.command!.id;
+s = await sync([{ commandId: dropLeg, status: 'accepted' }, { commandId: dropLeg, status: 'done', message: 'Landed. Package released.' }]);
+assert.equal(s.data.command?.type, 'RTL', 'return home is queued as soon as the package is delivered');
+const homeLeg = s.data.command!.id;
+await sync([{ commandId: homeLeg, status: 'accepted' }, { commandId: homeLeg, status: 'done', message: 'Landed.' }]);
+view = (await owner(path)).data.drone;
+assert.equal(view.job?.status, 'completed');
+assert.deepEqual(view.job?.events.map(e => e.status), ['dispatched', 'en_route_pickup', 'at_pickup', 'package_loaded', 'en_route_dropoff', 'delivered', 'returning', 'completed']);
+for (const title of ['Package picked up', 'Package delivered', 'Delivery complete']) assert.ok(view.events.some(e => e.title === title), title);
+const feed = await owner('/api/drones?view=jobs');
+assert.equal(feed.data.jobs.find(j => j.job.id === jobId)?.job.returnId, 'smoke-return', 'tracking page feed shows the delivery');
+assert.equal((await stranger('/api/drones?view=jobs')).data.jobs.length, 0, 'other accounts never see the delivery');
+// A failed leg needs attention and can be resumed; cancelling stops waiting legs.
+job = await owner(jobs, 'POST', { op: 'create', pickup: pick, dropoff: drop, altM: 30, pilotReady: true });
+const second = job.data.job.id;
+s = await sync();
+await sync([{ commandId: s.data.command!.id, status: 'failed', message: 'Command stopped: website link lost.' }]);
+assert.equal((await owner(path)).data.drone.job?.status, 'failed');
+assert.equal((await owner(jobs, 'POST', { op: 'resume', jobId: second, pilotReady: true })).data.job.status, 'dispatched');
+assert.equal((await owner(jobs, 'POST', { op: 'cancel', jobId: second })).data.job.status, 'cancelled');
+assert.equal((await sync()).data.command, null, 'cancelling withdraws the waiting leg');
 
 const rotated = await owner(`${path}/token`, 'POST', {});
 assert.equal((await sync()).status, 401, 'old token stops working after rotation');

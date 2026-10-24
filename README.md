@@ -2,9 +2,9 @@
 
 A map-first drone returns app for the Cal Hacks 13.0 demo. The app lives separately from the parent arbitrage engine. The return journey on the tracking page is **simulated**. It never creates a carrier return, charges a payment method, or approves a retailer refund.
 
-**Live drone control (`/fly`).** A separate Fly page links a real drone over 4G. An agent on the drone's onboard computer (`drone-agent/aero_agent.py`, ArduPilot over MAVLink) syncs once per second. Owners and invited pilots then see it move live and fly it from A to B inside a geofence, with Hold / Land / Return home controls and signed SMS commands as a backup. Every flight is checked on the server and again on the drone. Protocol, safety model and setup: [`docs/DRONE_API.md`](docs/DRONE_API.md) and [`drone-agent/README.md`](drone-agent/README.md). No hardware? `scripts/fake-drone.ts` or `aero_agent.py --sim` provide a simulated drone that speaks the same protocol.
+**Live drone control (`/fly`).** A separate Fly page links a real drone over 4G. An agent on the drone's onboard computer (`drone-agent/aero_agent.py`, ArduPilot over MAVLink) syncs once per second. Owners and invited pilots then see it move live and fly it from A to B inside a geofence, with Hold / Land / Return home controls and signed SMS commands as a backup. Every flight is checked on the server and again on the drone. **Deliveries** run as jobs with live status updates (dispatched → at pickup → package picked up → in flight → delivered → home), shown on `/fly` and as a live banner on the tracking page. How it all works and the recommended setup: [`docs/DRONE_ARCHITECTURE.md`](docs/DRONE_ARCHITECTURE.md). Protocol, safety model and setup: [`docs/DRONE_API.md`](docs/DRONE_API.md) and [`drone-agent/README.md`](drone-agent/README.md). No hardware? `scripts/fake-drone.ts` or `aero_agent.py --sim` provide a simulated drone that speaks the same protocol.
 
-Apply `drizzle/0002_live_drones.sql` (same command as the other migrations below) before using `/fly` locally.
+Apply `drizzle/0002_live_drones.sql` and `drizzle/0003_delivery_jobs.sql` (same command as the other migrations below) before using `/fly` locally.
 
 Source: [kv1514/aero-returns](https://github.com/kv1514/aero-returns) (private). GitHub Actions runs typechecks, unit tests, Actor tests, and a build on changes.
 

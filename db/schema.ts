@@ -24,5 +24,14 @@ export const drones=sqliteTable('drones',{
 export const droneCommands=sqliteTable('drone_commands',{
  id:text('id').primaryKey(),droneId:text('drone_id').notNull(),issuedBy:text('issued_by').notNull(),type:text('type').notNull(),params:text('params'),
  status:text('status').notNull(),channel:text('channel').notNull(),createdAt:integer('created_at').notNull(),updatedAt:integer('updated_at').notNull(),
- expiresAt:integer('expires_at').notNull(),message:text('message'),
+ expiresAt:integer('expires_at').notNull(),message:text('message'),jobId:text('job_id'),leg:text('leg'),
 },table=>[index('drone_commands_drone_created').on(table.droneId,table.createdAt)]);
+// Delivery jobs: a versioned JSON record (see lib/drone-jobs.ts), advanced only by drone acks and loading confirmation.
+export const droneJobs=sqliteTable('drone_jobs',{
+ id:text('id').primaryKey(),droneId:text('drone_id').notNull(),issuedBy:text('issued_by').notNull(),returnId:text('return_id'),status:text('status').notNull(),
+ record:text('record').notNull(),createdAt:integer('created_at').notNull(),updatedAt:integer('updated_at').notNull(),
+},table=>[index('drone_jobs_drone_created').on(table.droneId,table.createdAt)]);
+// Status feed: delivery milestones, command results and drone alerts.
+export const droneEvents=sqliteTable('drone_events',{
+ id:text('id').primaryKey(),droneId:text('drone_id').notNull(),jobId:text('job_id'),kind:text('kind').notNull(),title:text('title').notNull(),detail:text('detail'),at:integer('at').notNull(),
+},table=>[index('drone_events_drone_at').on(table.droneId,table.at)]);

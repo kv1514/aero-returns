@@ -1,14 +1,22 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Battery, Check, Copy, Crosshair, Gauge, Home, KeyRound, LandPlot, MapPin, MessageSquareText, Mountain, Navigation, Package, Pause, Plus, Radio, Satellite, Settings, ShieldCheck, Signal, Trash2, TriangleAlert, UserPlus, Users, Wifi, WifiOff, X } from 'lucide-react';
-import DroneMap from './drone-map';
+import { useCallback, useEffect, useRef, useState } from 'react';
+/* eslint-disable @next/next/no-html-link-for-pages -- vinext's <Link> client navigation throws in this app (RSC prefetch setup error), so internal links are plain full page loads. */
+import { ArrowLeft, ArrowRight, Battery, Bell, Check, Copy, Crosshair, Gauge, Home, KeyRound, LandPlot, MapPin, MessageSquareText, Mountain, Navigation, Package, PackageCheck, Pause, Plus, Radio, RotateCcw, Satellite, Settings, ShieldCheck, Signal, Trash2, TriangleAlert, UserPlus, Users, Wifi, WifiOff, X } from 'lucide-react';
+import DroneMap, { type MapStop } from './drone-map';
 import { useAccessibility } from './accessibility';
-import { preflight, plannedPath, MIN_BATTERY_PCT, type CommandType, type DroneCommand, type DroneView, type FlyRoute, type SmsCommand } from '@/lib/drone-protocol';
+import { preflight, plannedPath, MIN_BATTERY_PCT, type CommandType, type DroneCommand, type DroneEvent, type DroneView, type FlyRoute, type SmsCommand } from '@/lib/drone-protocol';
+import { isActiveJob, JOB_STEPS, JOB_TITLES, jobStep, type DeliveryJob } from '@/lib/drone-jobs';
 import { FACILITIES, distance, pathDistance, type Point, type ReturnRecord } from '@/lib/simulation';
 import './drone-control.css';
 
 type Tab = 'fly' | 'connect' | 'sms' | 'settings';
+type PickTarget = 'A' | 'B' | 'P' | 'D';
+const PICK_LABEL: Record<PickTarget, string> = { A: 'point A', B: 'point B', P: 'the pickup', D: 'the drop-off' };
+const JOB_GUIDANCE: Record<DeliveryJob['status'], string> = {
+  dispatched: 'Sending the drone to the pickup.', en_route_pickup: 'Flying to the pickup spot.', at_pickup: 'The drone has landed. Secure the package on it, then confirm.',
+  package_loaded: 'Taking off with the package.', en_route_dropoff: 'Carrying the package to the drop-off.', delivered: 'Package released at the drop-off.',
+  returning: 'Package delivered. Heading home.', completed: 'Delivered. All done.', cancelled: 'This delivery was cancelled.', failed: 'The drone stopped this delivery.',
+};
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
   const data = await response.json() as T & { error?: string };
@@ -25,9 +33,11 @@ export default function DroneControl() {
   const [drones, setDrones] = useState<DroneView[]>([]), [selected, setSelected] = useState<string | null>(null), [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<Tab>('fly'), [busy, setBusy] = useState(false), [toast, setToast] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
   const [token, setToken] = useState<{ id: string; value: string } | null>(null), [smsReady, setSmsReady] = useState(false);
-  const [pick, setPick] = useState<'A' | 'B' | null>(null), [a, setA] = useState<Point | null>(null), [b, setB] = useState<Point | null>(null);
+  const [pick, setPick] = useState<PickTarget | null>(null), [a, setA] = useState<Point | null>(null), [b, setB] = useState<Point | null>(null);
+  const [mode, setMode] = useState<'deliver' | 'free'>('deliver'), [pickup, setPickup] = useState<Point | null>(null), [dropoff, setDropoff] = useState<Point | null>(null);
+  const [returnHome, setReturnHome] = useState(true), [returnId, setReturnId] = useState<string | null>(null);
   const [altM, setAltM] = useState(30), [speedMs, setSpeedMs] = useState(6), [land, setLand] = useState(true), [pilotReady, setPilotReady] = useState(false);
-  const [returnPoints, setReturnPoints] = useState<{ pickup: Point; hub: Point; hubName: string } | null>(null);
+  const [returnPoints, setReturnPoints] = useState<{ id: string; pickup: Point; hub: Point; hubName: string } | null>(null);
   const [sms, setSms] = useState<{ text: string; to: string | null; sent: boolean } | null>(null), [sheet, setSheet] = useState(false), [now, setNow] = useState(0);
   const drone = drones.find(d => d.id === selected) ?? null;
   const notify = useCallback((text: string, tone: 'ok' | 'error' = 'ok') => { setToast({ text, tone }); setTimeout(() => setToast(t => t?.text === text ? null : t), 5000); }, []);
@@ -37,7 +47,7 @@ export default function DroneControl() {
     let active = true;
     const loadAll = () => api<{ drones: DroneView[]; sms: boolean }>('/api/drones').then(data => { if (!active) return; setDrones(data.drones); setSmsReady(data.sms); setSelected(s => s && data.drones.some(d => d.id === s) ? s : data.drones[0]?.id ?? null); setLoaded(true); }).catch(e => { if (active) { setLoaded(true); notify(e.message, 'error'); } });
     void loadAll();
-    api<{ returns: ReturnRecord[] }>('/api/returns').then(({ returns }) => { const r = returns[0]; const f = r && FACILITIES.find(x => x.id === r.facilityId); if (active && r && f) setReturnPoints({ pickup: r.package.pickup, hub: f.point, hubName: f.name }); }).catch(() => {});
+    api<{ returns: ReturnRecord[] }>('/api/returns').then(({ returns }) => { const r = returns[0]; const f = r && FACILITIES.find(x => x.id === r.facilityId); if (active && r && f) setReturnPoints({ id: r.id, pickup: r.package.pickup, hub: f.point, hubName: f.name }); }).catch(() => {});
     const list = setInterval(() => { if (!document.hidden) void loadAll(); }, 15000);
     return () => { active = false; clearInterval(list); };
   }, [notify]);
@@ -49,10 +59,30 @@ export default function DroneControl() {
     return () => { active = false; clearInterval(timer); };
   }, [selected, upsert]);
   const alt = Math.min(altM, drone?.maxAltM ?? altM);
-  const route: FlyRoute | null = b ? { waypoints: a ? [a, b] : [b], altM: alt, speedMs, land } : null;
+  const route: FlyRoute | null = b ? { waypoints: a ? [a, b] : [b], altM: alt, speedMs, land, release: false } : null;
   const refused = drone && route ? preflight(drone, route, now) : null;
   const length = drone && route ? pathDistance(plannedPath(drone.telemetry, route)) : 0;
   const eta = route ? length / speedMs + alt / 2.5 + (land ? alt / 1.5 : 0) : 0;
+  // Delivery: pickup (land, wait for loading) → drop-off (land, release) → home.
+  const delivery: FlyRoute | null = pickup && dropoff ? { waypoints: [pickup, dropoff], altM: alt, speedMs, land: true, release: false } : null;
+  const deliveryRefused = drone && delivery ? preflight(drone, delivery, now) : null;
+  const deliveryLength = drone && delivery ? pathDistance(plannedPath(drone.telemetry, delivery)) : 0;
+  const job = drone?.job ?? null, jobLive = !!job && isActiveJob(job);
+  const here: Point | null = drone?.telemetry ? [drone.telemetry.lng, drone.telemetry.lat] : null;
+  const stop = (key: string, label: string, kind: MapStop['kind'], point: Point | null): MapStop[] => point ? [{ key, label, kind, point }] : [];
+  const stops: MapStop[] = jobLive ? [...stop('p', 'P', 'pickup', job.pickup), ...stop('d', 'D', 'dropoff', job.dropoff)]
+    : mode === 'deliver' ? [...stop('p', 'P', 'pickup', pickup), ...stop('d', 'D', 'dropoff', dropoff)] : [...stop('a', 'A', 'a', a), ...stop('b', 'B', 'b', b)];
+  const ahead: (Point | null | undefined)[] = jobLive
+    ? (['delivered', 'returning'].includes(job.status) ? [drone?.home] : job.loaded ? [job.dropoff] : [job.pickup, job.dropoff])
+    : mode === 'deliver' ? [pickup, dropoff] : [a, b];
+  const plan = [here, ...ahead].filter((p): p is Point => !!p);
+  // Toast every new delivery status as it arrives from the drone.
+  const seenJob = useRef<{ id: string; count: number } | null>(null);
+  useEffect(() => {
+    if (!job) return;
+    const last = seenJob.current; seenJob.current = { id: job.id, count: job.events.length };
+    if (last?.id === job.id && job.events.length > last.count) { const e = job.events[job.events.length - 1]; notify(`${JOB_TITLES[e.status]}${e.status === 'failed' && job.error ? `: ${job.error}` : ''}`, e.status === 'failed' ? 'error' : 'ok'); }
+  }, [job, notify]);
 
   async function run<T>(work: () => Promise<T>, done?: string) { setBusy(true); try { const result = await work(); if (done) notify(done); return result; } catch (e) { notify((e as Error).message, 'error'); return null; } finally { setBusy(false); } }
   const send = (type: CommandType) => run(async () => { const data = await api<{ drone: DroneView }>(`/api/drones/${drone!.id}/commands`, { method: 'POST', body: JSON.stringify(type === 'FLY_ROUTE' ? { type, params: route, pilotReady } : { type }) }); upsert(data.drone); }, type === 'FLY_ROUTE' ? 'Flight sent. The drone will take off within a few seconds.' : `${COMMAND_LABEL[type]} sent to the drone.`);
@@ -62,18 +92,21 @@ export default function DroneControl() {
   async function action<T extends { drone: DroneView }>(path: string, body: object, done: string) { const data = await run(() => api<T>(`/api/drones/${drone!.id}/${path}`, { method: 'POST', body: JSON.stringify(body) }), done); if (data) upsert(data.drone); return data; }
   async function remove() { if (!drone || !confirm(drone.role === 'owner' ? `Remove ${drone.name}? Its token stops working immediately.` : `Leave ${drone.name}?`)) return; const ok = await run(() => api(`/api/drones/${drone.id}`, { method: 'DELETE' }), 'Drone removed.'); if (ok) { setDrones(list => list.filter(d => d.id !== drone.id)); setSelected(drones.find(d => d.id !== drone.id)?.id ?? null); } }
   async function text(command: SmsCommand) { const body = command === 'GOTO' ? { command, point: b, altM } : { command }; const data = await run(() => api<{ text: string; to: string | null; sent: boolean }>(`/api/drones/${drone!.id}/sms`, { method: 'POST', body: JSON.stringify(body) })); if (data) { setSms(data); if (data.sent) notify(`Texted ${command} to the drone.`); } }
-  function onPick(p: Point) { if (pick === 'A') setA(p); else setB(p); setPick(null); setSheet(true); }
+  function onPick(p: Point) { ({ A: setA, B: setB, P: (v: Point) => { setPickup(v); setReturnId(null); }, D: (v: Point) => { setDropoff(v); setReturnId(null); } } as const)[pick!](p); setPick(null); setSheet(true); }
+  const startPick = (target: PickTarget) => { setPick(pick === target ? null : target); setSheet(false); };
+  const jobOp = (op: 'create' | 'loaded' | 'cancel' | 'resume', done: string) => action<{ drone: DroneView; job: DeliveryJob }>('jobs',
+    op === 'create' ? { op, pickup, dropoff, altM: alt, speedMs, returnHome, ...(returnId ? { returnId } : {}), pilotReady: true } : { op, jobId: job!.id, ...(op === 'resume' ? { pilotReady: true } : {}) }, done);
   const copy = (value: string) => navigator.clipboard.writeText(value).then(() => notify('Copied.'), () => notify('Select the text and copy it manually.', 'error'));
 
   const t = drone?.telemetry, online = !!drone?.online, origin = typeof location === 'undefined' ? '' : location.origin;
   return <main className="fly-app">
     <header className="fly-topbar">
-      <Link className="brand" href="/" aria-label="Back to AERO returns"><span className="brand-symbol"><svg viewBox="0 0 30 30"><path d="M2 25 12 4h6l10 21H19L15 14l-5 11Z" fill="currentColor" /><path d="m4 22 20-8" stroke="white" strokeWidth="2.5" /></svg></span>AERO<span className="fly-brand-tag">FLY</span></Link>
-      <nav><Link href="/"><ArrowLeft size={15} />Returns</Link></nav>
+      <a className="brand" href="/" aria-label="Back to AERO returns"><span className="brand-symbol"><svg viewBox="0 0 30 30"><path d="M2 25 12 4h6l10 21H19L15 14l-5 11Z" fill="currentColor" /><path d="m4 22 20-8" stroke="white" strokeWidth="2.5" /></svg></span>AERO<span className="fly-brand-tag">FLY</span></a>
+      <nav><a href="/"><ArrowLeft size={15} />Returns</a></nav>
       {drone && <span className={`fly-link-pill ${online ? 'live' : ''}`}>{online ? <Wifi size={14} /> : <WifiOff size={14} />}{online ? `Live · ${t?.link.toUpperCase()}` : 'Offline'}</span>}
     </header>
     <section className="fly-canvas">
-      <DroneMap drone={drone} a={a} b={b} pick={pick} onPick={onPick} />
+      <DroneMap drone={drone} stops={stops} plan={plan} pick={pick ? PICK_LABEL[pick] : null} onPick={onPick} />
       {drone && t && <div className="fly-hud" aria-live="polite">
         <div><span><Mountain size={14} />Altitude</span><strong>{t.altM.toFixed(0)}<small>m</small></strong></div>
         <div><span><Gauge size={14} />Speed</span><strong>{(t.groundSpeedMs * 3.6).toFixed(0)}<small>km/h</small></strong></div>
@@ -91,6 +124,10 @@ export default function DroneControl() {
           {t?.message && <p className="fly-message"><Radio size={13} />{t.message}</p>}
           {online && t && !t.flightAllowed && <p className="fly-note warn"><TriangleAlert size={15} />Observe-only. Restart the agent with <code>--allow-flight</code> to fly from here.</p>}
           {!online && <p className="fly-note"><WifiOff size={15} />{drone.lastSeen ? 'No data from the drone. Check its 4G signal and power, or use Text backup.' : 'Waiting for the drone to connect. Start the agent from the Connect tab.'}</p>}
+          {job && <DeliveryCard job={job} payload={t?.payload ?? 'unknown'} busy={busy} online={online} pilotReady={pilotReady} onPilotReady={setPilotReady}
+            onLoaded={() => void jobOp('loaded', 'Package picked up. Taking off for the drop-off.')}
+            onCancel={() => void jobOp('cancel', 'Delivery cancelled.')}
+            onResume={() => void jobOp('resume', 'Delivery resumed.')} />}
           <div className="fly-emergency" role="group" aria-label="Safety controls">
             <button disabled={busy || !online} onClick={() => void send('HOLD')}><Pause size={16} />Hold</button>
             <button disabled={busy || !online} onClick={() => void send('LAND')}><LandPlot size={16} />Land</button>
@@ -99,14 +136,32 @@ export default function DroneControl() {
           <div className="fly-tabs" role="tablist">{([['fly', 'Fly', Navigation], ['connect', 'Connect', KeyRound], ['sms', 'Text backup', MessageSquareText], ['settings', 'Settings', Settings]] as const).map(([id, label, Icon]) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}><Icon size={14} />{label}</button>)}</div>
 
           {tab === 'fly' && <div className="fly-section">
+            <div className="fly-mode" role="radiogroup" aria-label="Flight type"><button role="radio" aria-checked={mode === 'deliver'} className={mode === 'deliver' ? 'selected' : ''} onClick={() => { setMode('deliver'); setPick(null); }}><Package size={14} />Delivery</button><button role="radio" aria-checked={mode === 'free'} className={mode === 'free' ? 'selected' : ''} onClick={() => { setMode('free'); setPick(null); }}><Navigation size={14} />Free flight</button></div>
+            {mode === 'deliver' ? (jobLive ? <p className="fly-note"><PackageCheck size={15} />A delivery is in progress. Follow it in the card above; status updates appear below.</p> : <>
+              <div className="fly-points">
+                <div className="fly-point"><span className="fly-dot pickup">P</span><div><small>PICK UP FROM</small><strong>{pickup ? fmtPoint(pickup) : 'Choose the pickup spot'}</strong></div>
+                  <div className="fly-point-actions">{pickup && <button onClick={() => setPickup(null)} title="Clear pickup"><X size={14} /></button>}<button className={pick === 'P' ? 'active' : ''} onClick={() => startPick('P')}><MapPin size={14} />{pick === 'P' ? 'Tap map…' : 'Pick'}</button></div></div>
+                <div className="fly-point-line" />
+                <div className="fly-point"><span className="fly-dot b">D</span><div><small>DELIVER TO</small><strong>{dropoff ? fmtPoint(dropoff) : 'Choose the drop-off'}</strong></div>
+                  <div className="fly-point-actions">{dropoff && <button onClick={() => setDropoff(null)} title="Clear drop-off"><X size={14} /></button>}<button className={pick === 'D' ? 'active' : ''} onClick={() => startPick('D')}><MapPin size={14} />{pick === 'D' ? 'Tap map…' : 'Pick'}</button></div></div>
+              </div>
+              {returnPoints && <button className="fly-return-route" onClick={() => { setPickup(returnPoints.pickup); setDropoff(returnPoints.hub); setReturnId(returnPoints.id); }}><Package size={16} /><span><strong>Use my latest return</strong><small>Pickup = your doorstep · Drop-off = {returnPoints.hubName}</small></span><ArrowRight size={15} /></button>}
+              <label className="fly-slider"><span>Altitude <strong>{alt} m</strong></span><input type="range" min={5} max={drone.maxAltM} value={alt} onChange={e => setAltM(Number(e.target.value))} /></label>
+              <label className="fly-slider"><span>Speed <strong>{speedMs} m/s · {(speedMs * 3.6).toFixed(0)} km/h</strong></span><input type="range" min={2} max={12} value={speedMs} onChange={e => setSpeedMs(Number(e.target.value))} /></label>
+              <div className="fly-toggle" role="radiogroup" aria-label="After delivery"><button role="radio" aria-checked={returnHome} className={returnHome ? 'selected' : ''} onClick={() => setReturnHome(true)}>Return home after</button><button role="radio" aria-checked={!returnHome} className={!returnHome ? 'selected' : ''} onClick={() => setReturnHome(false)}>Stay at drop-off</button></div>
+              {delivery && <div className="fly-estimate"><span>{(deliveryLength / 1000).toFixed(2)} km</span><span>~{Math.ceil((deliveryLength / speedMs + alt / 1.2) / 60)} min flying</span><span>lands at both stops</span></div>}
+              <label className="fly-check"><input type="checkbox" checked={pilotReady} onChange={e => setPilotReady(e.target.checked)} /><span>A pilot with a remote controller can see the drone and will take over if needed.</span></label>
+              {delivery && deliveryRefused && <p className="fly-note warn"><TriangleAlert size={15} />{deliveryRefused.replace('Point A', 'The pickup').replace('Point B', 'The drop-off')}</p>}
+              <button className="primary fly-go" disabled={busy || !delivery || !!deliveryRefused || !pilotReady} onClick={() => void jobOp('create', 'Delivery started. The drone is heading to the pickup.')}>{delivery ? 'Start delivery' : 'Choose pickup and drop-off'}<ArrowRight size={17} /></button>
+              <p className="fly-fine"><ShieldCheck size={13} />The drone lands at the pickup and waits. Nothing flies with a package until a person confirms it is secured. At the drop-off it lands and opens the gripper.</p>
+            </>) : <>
             <div className="fly-points">
               <div className="fly-point"><span className="fly-dot a">A</span><div><small>FROM</small><strong>{a ? fmtPoint(a) : 'Where the drone is now'}</strong></div>
-                <div className="fly-point-actions">{a && <button onClick={() => setA(null)} title="Start from the drone's position"><Crosshair size={14} /></button>}<button className={pick === 'A' ? 'active' : ''} onClick={() => { setPick(pick === 'A' ? null : 'A'); setSheet(false); }}><MapPin size={14} />{pick === 'A' ? 'Tap map…' : 'Pick'}</button></div></div>
+                <div className="fly-point-actions">{a && <button onClick={() => setA(null)} title="Start from the drone's position"><Crosshair size={14} /></button>}<button className={pick === 'A' ? 'active' : ''} onClick={() => startPick('A')}><MapPin size={14} />{pick === 'A' ? 'Tap map…' : 'Pick'}</button></div></div>
               <div className="fly-point-line" />
               <div className="fly-point"><span className="fly-dot b">B</span><div><small>TO</small><strong>{b ? fmtPoint(b) : 'Choose a destination'}</strong></div>
-                <div className="fly-point-actions">{b && <button onClick={() => setB(null)} title="Clear destination"><X size={14} /></button>}<button className={pick === 'B' ? 'active' : ''} onClick={() => { setPick(pick === 'B' ? null : 'B'); setSheet(false); }}><MapPin size={14} />{pick === 'B' ? 'Tap map…' : 'Pick'}</button></div></div>
+                <div className="fly-point-actions">{b && <button onClick={() => setB(null)} title="Clear destination"><X size={14} /></button>}<button className={pick === 'B' ? 'active' : ''} onClick={() => startPick('B')}><MapPin size={14} />{pick === 'B' ? 'Tap map…' : 'Pick'}</button></div></div>
             </div>
-            {returnPoints && <button className="fly-return-route" onClick={() => { setA(returnPoints.pickup); setB(returnPoints.hub); setLand(true); }}><Package size={16} /><span><strong>Fly my latest return</strong><small>A = pickup spot · B = {returnPoints.hubName}</small></span><ArrowRight size={15} /></button>}
             <label className="fly-slider"><span>Altitude <strong>{alt} m</strong></span><input type="range" min={5} max={drone.maxAltM} value={alt} onChange={e => setAltM(Number(e.target.value))} /></label>
             <label className="fly-slider"><span>Speed <strong>{speedMs} m/s · {(speedMs * 3.6).toFixed(0)} km/h</strong></span><input type="range" min={2} max={12} value={speedMs} onChange={e => setSpeedMs(Number(e.target.value))} /></label>
             <div className="fly-toggle" role="radiogroup" aria-label="At point B"><button role="radio" aria-checked={land} className={land ? 'selected' : ''} onClick={() => setLand(true)}>Land at B</button><button role="radio" aria-checked={!land} className={!land ? 'selected' : ''} onClick={() => setLand(false)}>Hover at B</button></div>
@@ -115,7 +170,9 @@ export default function DroneControl() {
             {route && refused && <p className="fly-note warn"><TriangleAlert size={15} />{refused}</p>}
             <button className="primary fly-go" disabled={busy || !route || !!refused || !pilotReady} onClick={() => void send('FLY_ROUTE')}>{b ? <>Fly {a ? 'A → B' : 'to B'}</> : 'Pick point B to fly'}<ArrowRight size={17} /></button>
             <p className="fly-fine"><ShieldCheck size={13} />Flights stay inside the {drone.geofenceM} m safety zone around <strong>H</strong>, below {drone.maxAltM} m. The drone re-checks every command and returns home if it loses this website for 45 s.</p>
-            <CommandLog commands={drone.commands} />
+            </>}
+            <EventFeed events={drone.events} />
+            {mode === 'free' && <CommandLog commands={drone.commands} />}
           </div>}
 
           {tab === 'connect' && <div className="fly-section">
@@ -194,6 +251,35 @@ function SettingsForm({ drone, busy, onSave }: { drone: DroneView; busy: boolean
 }
 function Command({ label, value, onCopy }: { label: string; value: string; onCopy: (v: string) => void }) {
   return <div className="fly-command"><span>{label}</span><code>{value}</code><button onClick={() => onCopy(value)} aria-label={`Copy ${label} command`}><Copy size={14} /></button></div>;
+}
+const clockTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+function DeliveryCard({ job, payload, busy, online, pilotReady, onPilotReady, onLoaded, onCancel, onResume }: { job: DeliveryJob; payload: 'loaded' | 'empty' | 'unknown'; busy: boolean; online: boolean; pilotReady: boolean; onPilotReady: (v: boolean) => void; onLoaded: () => void; onCancel: () => void; onResume: () => void }) {
+  const live = isActiveJob(job), step = jobStep(job), last = job.events[job.events.length - 1];
+  const onBoard = payload === 'loaded' || (payload === 'unknown' && job.loaded && !job.events.some(e => e.status === 'delivered'));
+  // Two-step confirmation in the card instead of a browser dialog (works on phones and stays visible).
+  const [confirming, setConfirming] = useState<{ op: 'loaded' | 'cancel'; status: DeliveryJob['status'] } | null>(null);
+  const ask = confirming?.status === job.status ? confirming.op : null;
+  return <section className={`fly-job ${job.status} ${live ? 'live' : 'ended'}`} aria-live="polite">
+    <div className="fly-job-head"><span className="eyebrow">DELIVERY · {job.id.slice(0, 6).toUpperCase()}</span>{onBoard && <span className="fly-badge onboard"><PackageCheck size={12} />Package on board</span>}<time>{clockTime(last.at)}</time></div>
+    <h2>{JOB_TITLES[job.status]}</h2>
+    <p>{job.status === 'failed' && job.error ? job.error : JOB_GUIDANCE[job.status]}{job.status === 'delivered' && job.returnHome ? ' Returning home next.' : ''}</p>
+    <ol className="fly-job-steps" aria-label={`Step ${step + 1} of ${JOB_STEPS.length}`}>{JOB_STEPS.map((s, i) => <li key={s.status} className={`${i < step || (!live && job.status === 'completed') ? 'done' : ''} ${i === step && live ? 'current' : ''}`}><span>{i < step || job.status === 'completed' ? <Check size={11} /> : i + 1}</span><small>{s.label}</small></li>)}</ol>
+    {ask ? <div className="fly-confirm" role="alertdialog" aria-label={ask === 'loaded' ? 'Confirm the package is secured' : 'Confirm cancelling the delivery'}>
+      <p>{ask === 'loaded' ? 'Is the package secured on the drone? It takes off for the drop-off right away.' : job.loaded ? 'Cancel this delivery? The drone flies home with the package.' : 'Cancel this delivery? The drone stops and comes home if it is flying.'}</p>
+      <div><button className="secondary" onClick={() => setConfirming(null)}>{ask === 'loaded' ? 'Not yet' : 'Keep delivering'}</button><button className={ask === 'loaded' ? 'primary' : 'fly-danger-button'} disabled={busy || (ask === 'loaded' && !online)} onClick={() => { setConfirming(null); if (ask === 'loaded') onLoaded(); else onCancel(); }}>{ask === 'loaded' ? 'Yes, take off' : 'Cancel delivery'}</button></div>
+    </div> : <>
+    {job.status === 'at_pickup' && <button className="primary fly-go" disabled={busy || !online} onClick={() => setConfirming({ op: 'loaded', status: job.status })}><PackageCheck size={17} />Package is loaded. Send it.</button>}
+    {job.status === 'failed' && <>
+      <label className="fly-check"><input type="checkbox" checked={pilotReady} onChange={e => onPilotReady(e.target.checked)} /><span>A pilot with a remote controller can see the drone.</span></label>
+      <button className="primary fly-go" disabled={busy || !online || !pilotReady} onClick={onResume}><RotateCcw size={16} />Resume delivery</button>
+    </>}
+    {live && <button className="fly-text-button danger" disabled={busy} onClick={() => setConfirming({ op: 'cancel', status: job.status })}><X size={14} />Cancel delivery</button>}
+    </>}
+  </section>;
+}
+function EventFeed({ events }: { events: DroneEvent[] }) {
+  if (!events.length) return null;
+  return <div className="fly-log"><h3><Bell size={14} />Status updates</h3><ol>{events.slice(0, 10).map(e => <li key={e.id}><span className={`fly-event-dot ${e.kind}`} /><div><strong>{e.title}</strong>{e.detail && <small>{e.detail}</small>}</div><time>{clockTime(e.at)}</time></li>)}</ol></div>;
 }
 function CommandLog({ commands }: { commands: DroneCommand[] }) {
   if (!commands.length) return null;

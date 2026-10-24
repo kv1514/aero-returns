@@ -147,6 +147,7 @@ class SimVehicle:
         self.home = home
         self.target = None  # (point, alt, speed)
         self.action = "idle"  # idle | takeoff | goto | hold | land | rtl
+        self.released = False
 
     def state(self) -> VehicleState:
         return self.s
@@ -166,6 +167,9 @@ class SimVehicle:
 
     def rtl(self):
         self.action, self.s.mode = "rtl", "RTL"
+
+    def release(self):
+        self.released = True
 
     def step(self, dt: float):
         s = self.s
@@ -215,6 +219,7 @@ class MavlinkVehicle:
             raise RuntimeError("No heartbeat from the flight controller. Check wiring, baud rate and SERIALx_PROTOCOL=2.")
         self.s = VehicleState()
         self.lock = threading.Lock()
+        self.command_acks = {}  # MAV_CMD id -> MAV_RESULT, filled by the reader thread
         for msg_id, hz in ((33, 4), (24, 1), (1, 1), (245, 1), (74, 4)):  # position, GPS, status, landed, VFR_HUD
             self.m.mav.command_long_send(self.m.target_system, self.m.target_component,
                                          mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0, msg_id, 1_000_000 / hz, 0, 0, 0, 0, 0)
@@ -246,6 +251,8 @@ class MavlinkVehicle:
                         s.on_ground = True
                 elif kind == "EXTENDED_SYS_STATE":
                     s.on_ground = msg.landed_state == mav.MAV_LANDED_STATE_ON_GROUND
+                elif kind == "COMMAND_ACK":
+                    self.command_acks[msg.command] = msg.result
 
     def state(self) -> VehicleState:
         with self.lock:
@@ -289,6 +296,24 @@ class MavlinkVehicle:
     def rtl(self):
         self._mode("RTL")
 
+    def release(self):
+        """Open the payload gripper (ArduPilot GRIPPER_ENABLE=1, servo or EPM)."""
+        mav = self.mavutil.mavlink
+        with self.lock:
+            self.command_acks.pop(mav.MAV_CMD_DO_GRIPPER, None)
+        self.m.mav.command_long_send(self.m.target_system, self.m.target_component,
+                                     mav.MAV_CMD_DO_GRIPPER, 0, 1, 0, 0, 0, 0, 0, 0)  # gripper 1, 0 = release
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            with self.lock:
+                result = self.command_acks.get(mav.MAV_CMD_DO_GRIPPER)
+            if result is not None:
+                if result != mav.MAV_RESULT_ACCEPTED:
+                    raise RuntimeError(f"Gripper refused the release (result {result}). Check GRIPPER_ENABLE.")
+                return
+            time.sleep(0.1)
+        raise RuntimeError("No answer from the gripper. Check GRIPPER_ENABLE and wiring.")
+
     def close(self):
         self.running = False
 
@@ -323,6 +348,8 @@ class Pilot:
     last_link: float = 0.0
     link_action: str | None = None
     in_control: bool = False  # True only while the agent itself is flying the drone
+    release_at_end: bool = False  # drop the package after landing at the last waypoint
+    payload: str = "unknown"  # loaded / empty / unknown, reported to the website
     mode_set_at: float = -1e9  # telemetry can lag a mode change; ignore manual modes briefly after one
     message: str = ""
     acks: list = field(default_factory=list)
@@ -384,6 +411,10 @@ class Pilot:
                 self._cancel_route("replaced by a new flight")
                 self.command_id, self.route, self.waypoint, self.alt, self.speed = cid, waypoints, 0, alt, max(1.0, min(15.0, speed))
                 self.land_at_end = bool(params.get("land", True))
+                # A drop-off leg is only sent after a person confirmed loading at the pickup.
+                self.release_at_end = bool(params.get("release", False)) and self.land_at_end
+                if self.release_at_end:
+                    self.payload = "loaded"
                 self.in_control, self.mode_set_at = True, self.clock()
                 s = self.vehicle.state()
                 if s.on_ground or not s.armed:
@@ -408,7 +439,7 @@ class Pilot:
     def _cancel_route(self, why):
         if self.command_id:
             self.ack(self.command_id, "failed", f"Command {why}.")
-        self.command_id, self.route = None, []
+        self.command_id, self.route, self.release_at_end = None, [], False
 
     def _go(self):
         self.vehicle.goto(self.route[self.waypoint], self.alt, self.speed)
@@ -466,8 +497,16 @@ class Pilot:
                 self.command_id, self.route = None, []
         if self.state in ("landing", "returning") and s.on_ground and not s.armed:
             self.state = "landed"
+            status, note = "done", "Landed."
+            if self.release_at_end:
+                try:
+                    self.vehicle.release()
+                    self.payload, note = "empty", "Landed. Package released."
+                except Exception as exc:  # report it; the website marks the delivery for attention
+                    status, note = "failed", f"Landed, but the package release failed: {exc}"
+                self.release_at_end = False
             if self.command_id:
-                self.ack(self.command_id, "done", "Landed.")
+                self.ack(self.command_id, status, note)
             self.command_id, self.route = None, []
         if s.on_ground and not s.armed:
             self.in_control = False
@@ -496,7 +535,7 @@ class Pilot:
             "gpsFix": int(s.gps_fix), "satellites": int(s.satellites), "armed": bool(s.armed), "mode": str(s.mode)[:32],
             "state": self.state, "flightAllowed": self.allow_flight, "link": link, "activeCommandId": self.command_id,
             "waypointIndex": self.waypoint if self.route else None, "message": self.message[:200], "simulated": simulated,
-            "agentVersion": VERSION,
+            "agentVersion": VERSION, "payload": self.payload,
         }
 
 

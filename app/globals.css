@@ -94,3 +94,15 @@ body[data-motion=true] :is(.fleet-marker .drone-graphic svg,.drone-map-marker .d
   .fleet-marker{width:38px;height:38px}.fleet-marker .drone-graphic{inset:7px}
 }
 @media(max-width:760px) and (max-height:760px){.earth-entry,.simulator-toggle{bottom:412px}.simulator-panel{bottom:456px}.telemetry-panel{bottom:336px}}
+/* Live real-drone delivery banner on the tracking page */
+.live-delivery{position:absolute;z-index:6;left:464px;top:88px;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:#0f172a;color:#fff;text-decoration:none;box-shadow:0 10px 30px #0f172a33;max-width:430px;animation:live-in .3s ease-out}
+.live-delivery small{display:block;font-size:calc(9px * var(--font-scale, 1));letter-spacing:1.3px;color:#93a4bd;font-weight:600}
+.live-delivery strong{display:block;font-size:calc(14px * var(--font-scale, 1));font-family:'Manrope',var(--font);margin-top:2px}
+.live-delivery.at_pickup{background:#7c4a03}.live-delivery.delivered,.live-delivery.completed{background:#065f46}.live-delivery.failed{background:#991b1b}
+.live-delivery-dot{width:10px;height:10px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px #22c55e33;flex-shrink:0;animation:live-dot 2s ease-in-out infinite}.live-delivery-dot.offline{background:#94a3b8;animation:none;box-shadow:none}
+.live-delivery-steps{display:flex;gap:3px;margin-left:4px}.live-delivery-steps i{width:14px;height:4px;border-radius:2px;background:#ffffff33}.live-delivery-steps i.on{background:#60a5fa}
+.live-delivery.delivered .live-delivery-steps i.on,.live-delivery.completed .live-delivery-steps i.on{background:#6ee7b7}
+@keyframes live-in{from{opacity:0;transform:translateY(-6px)}}
+@media(max-width:1250px){.live-delivery{left:414px}}
+@media(max-width:760px){.live-delivery{left:16px;right:60px;top:44px;max-width:none;padding:8px 11px;gap:9px}.live-delivery strong{font-size:calc(12px * var(--font-scale, 1))}.live-delivery-steps{display:none}}
+body[data-motion=true] :is(.live-delivery,.live-delivery-dot){animation:none}

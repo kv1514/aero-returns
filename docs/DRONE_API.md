@@ -1,5 +1,7 @@
 # Live drone link
 
+Design rationale, delivery flow, hardware and roadmap: [`DRONE_ARCHITECTURE.md`](DRONE_ARCHITECTURE.md).
+
 AERO can now drive a real drone. The website never talks to the flight controller directly. A small agent on the drone's onboard computer does, and it polls the website over 4G:
 
 ```
@@ -23,11 +25,13 @@ The return-tracking simulation (`lib/simulation.ts`) is unchanged and separate. 
 | PATCH | `/api/drones/:id` `{name?, phone?, geofenceM?, maxAltM?, home?}` | owner | Limits and settings. `home: "current"` uses the drone's GPS position |
 | DELETE | `/api/drones/:id` | owner, pilot | Owner deletes the drone; a pilot leaves |
 | POST | `/api/drones/:id/commands` | owner, pilot | `{type:"FLY_ROUTE", params, pilotReady:true}` or `{type:"HOLD"\|"LAND"\|"RTL"\|"PING"}` |
+| POST | `/api/drones/:id/jobs` | owner, pilot | Deliveries: `{op:"create", pickup, dropoff, altM, speedMs?, returnHome?, returnId?, pilotReady:true}`, `{op:"loaded"|"cancel", jobId}`, `{op:"resume", jobId, pilotReady:true}` |
+| GET | `/api/drones?view=jobs` | any | Lightweight live-delivery feed for the tracking page |
 | POST | `/api/drones/:id/sms` | owner, pilot | Build (and with Twilio, send) a signed text command |
 | POST | `/api/drones/:id/share` `{revoke?}` | owner | New pilot code, or revoke it and remove all pilots |
 | POST | `/api/drones/:id/token` | owner | Rotate the device token. The old one stops working immediately |
 
-`FLY_ROUTE.params`: `{waypoints: [[lng,lat], …1–10], altM: 5–120, speedMs: 1–15 (default 6), land: true}`. The drone flies from where it is through every waypoint, then lands or hovers.
+`FLY_ROUTE.params`: `{waypoints: [[lng,lat], …1–10], altM: 5–120, speedMs: 1–15 (default 6), land: true}`. The drone flies from where it is through every waypoint, then lands or hovers. `release: true` (used by the delivery drop-off leg) opens the gripper after landing.
 
 ## Device API
 
@@ -37,7 +41,7 @@ The return-tracking simulation (`lib/simulation.ts`) is unchanged and separate. 
 { "telemetry": { "lat": 37.8719, "lng": -122.2585, "altM": 30, "headingDeg": 41, "groundSpeedMs": 6,
                  "batteryPct": 88, "gpsFix": 3, "satellites": 14, "armed": true, "mode": "GUIDED",
                  "state": "en_route", "flightAllowed": true, "link": "4g", "signalDbm": -81,
-                 "activeCommandId": "…", "waypointIndex": 0, "message": "Flying 1 waypoint(s) at 30 m.", "simulated": false },
+                 "activeCommandId": "…", "waypointIndex": 0, "message": "Flying 1 waypoint(s) at 30 m.", "simulated": false, "payload": "loaded" },
   "acks": [{ "commandId": "…", "status": "accepted|done|failed", "message": "…" }] }
 ```
 

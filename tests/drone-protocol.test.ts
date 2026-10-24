@@ -4,10 +4,10 @@ import { appendTrail, commandRequestSchema, formatToken, nextCommand, parseToken
 import type { Point } from '../lib/simulation';
 
 const now = 1_800_000_000_000, home: Point = [-122.2585, 37.8719];
-const telemetry = (over: Partial<Telemetry> = {}): Telemetry => ({ lat: home[1], lng: home[0], altM: 0, headingDeg: 0, groundSpeedMs: 0, batteryPct: 90, gpsFix: 3, satellites: 12, armed: false, mode: 'GUIDED', state: 'landed', flightAllowed: true, link: '4g', simulated: false, ...over });
+const telemetry = (over: Partial<Telemetry> = {}): Telemetry => ({ lat: home[1], lng: home[0], altM: 0, headingDeg: 0, groundSpeedMs: 0, batteryPct: 90, gpsFix: 3, satellites: 12, armed: false, mode: 'GUIDED', state: 'landed', flightAllowed: true, link: '4g', simulated: false, payload: 'unknown', ...over });
 const drone = (over = {}) => ({ home, geofenceM: 500, maxAltM: 40, lastSeen: now - 1000, telemetry: telemetry(), ...over });
 const north = (m: number): Point => [home[0], home[1] + m / 111_195];
-const route = (over = {}) => ({ waypoints: [north(200)], altM: 30, speedMs: 6, land: true, ...over });
+const route = (over = {}) => ({ waypoints: [north(200)], altM: 30, speedMs: 6, land: true, release: false, ...over });
 
 test('preflight accepts a short flight inside the safety zone', () => {
   assert.equal(preflight(drone(), route(), now), null);

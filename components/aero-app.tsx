@@ -1,6 +1,5 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { Camera, Earth, UserRound as LogInIcon, ArrowRight, ArrowUpRight, Bell, Battery, Check, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Copy, Download, Home, Leaf, MapPin, Package, Pause, Play, Radio, RotateCcw, ShieldCheck, SlidersHorizontal, Sparkles, Navigation, Truck, Building2, Wind, X, Plus, Flag, Signal, ArrowUp, Timer, Box, TriangleAlert } from 'lucide-react';
 import FlightMap from './flight-map';
 import MapSettings,{useMapConfig} from './map-config';
@@ -17,7 +16,9 @@ import ReturnAssistant from './return-assistant';
 import Accessibility, {useAccessibility} from './accessibility';
 import { DroneIllustration } from './drone';
 import { createReturn, DEMO_PACKAGE, FACILITIES, snapshot, settle, STATE_TITLES, type Action, type ReturnRecord, type PackageInput } from '@/lib/simulation';
+import { isActiveJob, JOB_STEPS, JOB_TITLES, jobStep, type DeliveryJob } from '@/lib/drone-jobs';
 
+type LiveJob={droneId:string;droneName:string;online:boolean;job:DeliveryJob};
 const fmt=(seconds:number)=>{const total=Math.ceil(Math.max(0,seconds));return `${Math.floor(total/60).toString().padStart(2,'0')}:${(total%60).toString().padStart(2,'0')}`;};
 const clock=(ts:number)=>new Date(ts).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
 const shortId=(id:string)=>`AR-${id.slice(0,8).toUpperCase()}`;
@@ -28,6 +29,8 @@ export default function AeroApp({initialId}: {initialId?:string}) {
   const mapConfig=useMapConfig();
   const [demoAccount,setDemoAccount]=useState(false);
   useEffect(()=>{let active=true;fetch('/api/account').then(r=>r.json() as Promise<{demo?:boolean}>).then(a=>{if(active)setDemoAccount(a.demo===true);}).catch(()=>{});return()=>{active=false;};},[]);
+  const [liveJobs,setLiveJobs]=useState<LiveJob[]>([]);
+  useEffect(()=>{let active=true;const load=()=>{if(document.hidden)return;fetch('/api/drones?view=jobs').then(r=>r.ok?r.json() as Promise<{jobs:LiveJob[]}>:{jobs:[]}).then(d=>{if(active)setLiveJobs(d.jobs);}).catch(()=>{});};load();const timer=setInterval(load,4000);return()=>{active=false;clearInterval(timer);};},[]);
   const [pickupGuide,setPickupGuide]=useState<PickupGuide|null>(null);
   const [bookingDraft,setBookingDraft]=useState<BookingDraft|null>(null);
   useEffect(()=>{try{const saved=readDraft(sessionStorage.getItem(DRAFT_KEY));setBookingDraft(saved);if(!saved)sessionStorage.removeItem(DRAFT_KEY);}catch{}},[]);
@@ -64,17 +67,22 @@ export default function AeroApp({initialId}: {initialId?:string}) {
   const complete=s.state==='COMPLETED',cancelled=s.state==='CANCELLED',waiting=s.state==='AWAITING_PACKAGE',terminal=complete||cancelled;
   const step=complete?3:r.loaded?2:['ARRIVED_AT_PICKUP','AWAITING_PACKAGE'].includes(s.state)?1:0;
   useEffect(()=>{if(!record)return;const key=`${record.id}:${s.state}`;if(eventRef.current&&eventRef.current!==key)notify(STATE_TITLES[s.state]);eventRef.current=key;},[s.state,record?.id,notify]);
+  // A real-drone delivery for this return wins; otherwise show any delivery still in progress.
+  const liveJob=liveJobs.find(j=>j.job.returnId===record?.id&&isActiveJob(j.job))??liveJobs.find(j=>isActiveJob(j.job))??null;
+  const liveKey=useRef('');
+  useEffect(()=>{if(!liveJob)return;const key=`${liveJob.job.id}:${liveJob.job.status}`;if(liveKey.current&&liveKey.current!==key)notify(`Live drone: ${JOB_TITLES[liveJob.job.status]}`);liveKey.current=key;},[liveJob,notify]);
   async function action(a:Action,rate?:number){if(!record||busy)return false;setBusy(true);try{accept(await api(`/api/returns/${record.id}`,{method:'PATCH',body:JSON.stringify({action:a,rate})}));channel.current?.postMessage({id:record.id});if(a==='reset')notify('A fresh start. Your demo has been reset.');if(a==='load')notify('Package loading confirmed by you. Ready for takeoff.');return true;}catch(e){notify((e as Error).message);return false;}finally{setBusy(false);}}
   async function copyLink(){try{await navigator.clipboard.writeText(`${location.origin}/track/${r.id}`);notify('Tracking link copied. It opens for your signed-in account or this demo session.');}catch{notify('Copy the tracking address from your browser’s address bar.');}}
   function receipt(){const completed=r.events.find(e=>e.state==='COMPLETED');const text=['AERO — SIMULATED HANDOFF RECEIPT',`Tracking: ${shortId(r.id)}`,`Return: ${r.id}`,`Retailer: ${r.package.retailer}`,`Retailer return reference: ${r.package.returnReference||'Not provided'}`,`Pickup: ${r.package.address}`,`Facility: ${facility.name}`,`Package loaded: ${r.events.find(e=>e.state==='PACKAGE_LOADED')?new Date(r.events.find(e=>e.state==='PACKAGE_LOADED')!.at).toISOString():'Unavailable'}`,`Received: ${completed?new Date(completed.at).toISOString():'Pending'}`,'Status: Simulated facility handoff acknowledged','This is a demonstration receipt, not carrier proof of delivery.','Retailer refund approval is a separate process.'].join('\n');const url=URL.createObjectURL(new Blob([text],{type:'text/plain'}));const a=document.createElement('a');a.href=url;a.download=`aero-${r.id.slice(0,8)}-demo-receipt.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function showHistory(){setDialog('history');void loadHistory().catch(e=>notify(e.message));}
   return <main className={`aero-app ${mapConfig.key?'google-provider':''}`}>
     <header className="topbar"><button className="brand" onClick={()=>setDialog('about')} aria-label="About AERO"><span className="brand-symbol"><svg viewBox="0 0 30 30"><path d="M2 25 12 4h6l10 21H19L15 14l-5 11Z" fill="currentColor"/><path d="m4 22 20-8" stroke="white" strokeWidth="2.5"/></svg></span>AERO<span className="brand-caption">Returns, reimagined.</span></button>
-      <nav aria-label="Main navigation"><button className={dialog!=='history'?'nav-active':''} onClick={()=>setDialog(null)}>Live tracking<span/></button><button onClick={showHistory} className={dialog==='history'?'nav-active':''}>My returns</button><button onClick={()=>setDialog('about')}>How it works</button><Link href="/fly" className="nav-fly">Fly a drone<span className="nav-live-dot"/></Link></nav>
-      <div className="header-actions"><span className="demo-badge"><span/>{demoAccount?'Demo account':'Simulation'}</span><Link className="fly-entry" href="/fly" aria-label="Fly a real drone"><Radio size={15}/>Fly</Link><button className="icon-button notifications" onClick={()=>setDialog('activity')} aria-label="View flight notifications"><Bell size={20}/>{record&&<i/>}</button><button className="new-return" onClick={()=>setDialog('booking')}><Plus size={16}/>New return</button><button className="icon-button access-button" aria-label="Accessibility settings" onClick={()=>setDialog('accessibility')}><SlidersHorizontal size={18}/></button><button className="avatar" aria-label="Your account" onClick={()=>setDialog('session')}><LogInIcon/></button></div>
+      <nav aria-label="Main navigation"><button className={dialog!=='history'?'nav-active':''} onClick={()=>setDialog(null)}>Live tracking<span/></button><button onClick={showHistory} className={dialog==='history'?'nav-active':''}>My returns</button><button onClick={()=>setDialog('about')}>How it works</button><a href="/fly" className="nav-fly">Fly a drone<span className="nav-live-dot"/></a></nav>
+      <div className="header-actions"><span className="demo-badge"><span/>{demoAccount?'Demo account':'Simulation'}</span><a className="fly-entry" href="/fly" aria-label="Fly a real drone"><Radio size={15}/>Fly</a><button className="icon-button notifications" onClick={()=>setDialog('activity')} aria-label="View flight notifications"><Bell size={20}/>{record&&<i/>}</button><button className="new-return" onClick={()=>setDialog('booking')}><Plus size={16}/>New return</button><button className="icon-button access-button" aria-label="Accessibility settings" onClick={()=>setDialog('accessibility')}><SlidersHorizontal size={18}/></button><button className="avatar" aria-label="Your account" onClick={()=>setDialog('session')}><LogInIcon/></button></div>
     </header>
     <section className="tracking-canvas">
       <FlightMap config={mapConfig} onConfigure={()=>setDialog('maps')} record={r} clockOffset={offset} stale={offline} frozenAt={lastSync} booking={false} onPin={()=>{}}/>
+      {liveJob&&<a href="/fly" className={`live-delivery ${liveJob.job.status}`} aria-label={`Live drone delivery: ${JOB_TITLES[liveJob.job.status]}. Open drone control.`}><span className={`live-delivery-dot ${liveJob.online?'':'offline'}`}/><span><small>LIVE DRONE · {liveJob.droneName}</small><strong>{JOB_TITLES[liveJob.job.status]}</strong></span><span className="live-delivery-steps" aria-hidden="true">{JOB_STEPS.map((step,i)=><i key={step.status} className={i<=jobStep(liveJob.job)?'on':''}/>)}</span><ArrowUpRight size={15}/></a>}
       <button className="earth-entry" onClick={()=>setDialog('earth')}><Earth size={16}/>Earth & Street View</button><div className="map-status"><span className={`status-dot ${offline?'warning':''}`}/>{offline?'Reconnecting':r.paused?'Simulation paused':'Live flight'}<span className="status-divider"/>{r.rate}× speed<button aria-label="Open simulation controls" onClick={()=>setSimulator(!simulator)}><SlidersHorizontal size={14}/></button></div>
       <aside className={`tracking-panel ${mobileExpanded?'expanded':''}`}>
         <button className="sheet-handle" aria-label={mobileExpanded?'Collapse tracking panel':'Expand tracking panel'} onClick={()=>setMobileExpanded(!mobileExpanded)}><span/></button>

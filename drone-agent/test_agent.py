@@ -164,6 +164,31 @@ class Flights(unittest.TestCase):
         fly(clock, sim, pilot, 1, link=False)
         self.assertEqual(sim.s.mode, "STABILIZE", "agent failsafes never override a manual pilot")
 
+    def test_delivery_pickup_then_dropoff_releases_package(self):
+        clock, sim, pilot = setup()
+        pilot.handle({"id": "pick", "type": "FLY_ROUTE", "params": {"waypoints": [north(80)], "altM": 20, "land": True}})
+        self.assertTrue(fly(clock, sim, pilot, 120, until=lambda: statuses(pilot, "pick") == ["accepted", "done"]))
+        self.assertEqual(pilot.state, "landed")
+        self.assertFalse(sim.released, "a pickup leg never drops anything")
+        pilot.handle({"id": "drop", "type": "FLY_ROUTE", "params": {"waypoints": [north(220)], "altM": 20, "land": True, "release": True}})
+        self.assertEqual(pilot.telemetry("4g", True)["payload"], "loaded")
+        self.assertTrue(fly(clock, sim, pilot, 120, until=lambda: statuses(pilot, "drop") == ["accepted", "done"]))
+        self.assertTrue(sim.released)
+        self.assertEqual(pilot.telemetry("4g", True)["payload"], "empty")
+        self.assertIn("released", pilot.acks[-1]["message"])
+        self.assertLess(a.distance(sim.state().point, north(220)), a.WAYPOINT_RADIUS_M + 0.5)
+
+    def test_release_failure_is_reported(self):
+        clock, sim, pilot = setup()
+
+        def jammed():
+            raise RuntimeError("servo jammed")
+        sim.release = jammed
+        pilot.handle({"id": "drop", "type": "FLY_ROUTE", "params": {"waypoints": [north(60)], "altM": 15, "land": True, "release": True}})
+        self.assertTrue(fly(clock, sim, pilot, 120, until=lambda: statuses(pilot, "drop") == ["accepted", "failed"]))
+        self.assertIn("servo jammed", pilot.acks[-1]["message"])
+        self.assertEqual(pilot.payload, "loaded")
+
     def test_sms_goto_and_telemetry_shape(self):
         clock, sim, pilot = setup()
         pilot.handle_sms(a.SmsCommand("GOTO", north(80), 25))

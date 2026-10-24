@@ -8,7 +8,9 @@ import type { DroneView } from '@/lib/drone-protocol';
 import type { Point } from '@/lib/simulation';
 import { MAP_STYLE } from '@/lib/fleet';
 const BERKELEY: Point = [-122.2585, 37.8719];
-type Props = { drone: DroneView | null; a: Point | null; b: Point | null; pick: 'A' | 'B' | null; onPick: (p: Point) => void };
+export type MapStop = { key: string; label: string; kind: 'a' | 'b' | 'pickup' | 'dropoff'; point: Point };
+/** `plan` is the dashed route still to fly; `pick` names what the next map tap places (e.g. "point B"). */
+type Props = { drone: DroneView | null; stops: MapStop[]; plan: Point[]; pick: string | null; onPick: (p: Point) => void };
 const line = (coordinates: Point[]) => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: coordinates.length > 1 ? coordinates : [...coordinates, ...coordinates] } });
 function circle(center: Point, meters: number) {
   const ring: Point[] = [];
@@ -23,9 +25,9 @@ const empty = { type: 'FeatureCollection' as const, features: [] };
 const overlayPadding = (el: HTMLElement) => innerWidth < 760 ? { top: 70, bottom: Math.round(el.clientHeight * .54), left: 0, right: 0 } : { top: 0, bottom: 0, left: 440, right: 0 };
 const pin = (label: string, kind: string) => { const el = document.createElement('div'); el.className = `fly-pin ${kind}`; el.innerHTML = `<span></span>`; el.querySelector('span')!.textContent = label; return el; };
 
-export default function DroneMap({ drone, a, b, pick, onPick }: Props) {
+export default function DroneMap({ drone, stops, plan, pick, onPick }: Props) {
   const container = useRef<HTMLDivElement>(null), map = useRef<MapLibreMap | null>(null), ml = useRef<typeof import('maplibre-gl') | null>(null);
-  const markers = useRef<{ drone?: Marker; home?: Marker; a?: Marker; b?: Marker }>({});
+  const markers = useRef<{ drone?: Marker; home?: Marker; stops: Map<string, Marker> }>({ stops: new Map() });
   const motion = useRef({ from: null as Point | null, to: null as Point | null, start: 0, heading: 0, shown: null as Point | null });
   const pickRef = useRef({ pick, onPick });
   useEffect(() => { pickRef.current = { pick, onPick }; });
@@ -71,7 +73,7 @@ export default function DroneMap({ drone, a, b, pick, onPick }: Props) {
       };
       frame = requestAnimationFrame(animate);
     });
-    return () => { disposed = true; cancelAnimationFrame(frame); map.current?.remove(); map.current = null; markers.current = {}; };
+    return () => { disposed = true; cancelAnimationFrame(frame); map.current?.remove(); map.current = null; markers.current = { stops: new Map() }; };
   }, []);
 
   useEffect(() => {
@@ -79,16 +81,12 @@ export default function DroneMap({ drone, a, b, pick, onPick }: Props) {
     const t = drone?.telemetry, here: Point | null = t ? [t.lng, t.lat] : null;
     (m.getSource('fence') as GeoJSONSource).setData(drone?.home ? circle(drone.home, drone.geofenceM) : empty);
     (m.getSource('trail') as GeoJSONSource).setData(drone && drone.trail.length > 1 ? line(drone.trail) : empty);
-    const start = a ?? here, plan = [start, b].filter(Boolean) as Point[];
-    (m.getSource('plan') as GeoJSONSource).setData(plan.length > 1 ? line(here && a ? [here, ...plan] : plan) : empty);
-    const place = (key: 'home' | 'a' | 'b', p: Point | null, make: () => HTMLElement) => {
-      const existing = markers.current[key];
-      if (!p) { existing?.remove(); delete markers.current[key]; return; }
-      if (existing) existing.setLngLat(p); else markers.current[key] = new lib.Marker({ element: make(), anchor: key === 'home' ? 'center' : 'bottom' }).setLngLat(p).addTo(m);
-    };
-    place('home', drone?.home ?? null, () => pin('H', 'home'));
-    place('a', a, () => pin('A', 'a'));
-    place('b', b, () => pin('B', 'b'));
+    (m.getSource('plan') as GeoJSONSource).setData(plan.length > 1 ? line(plan) : empty);
+    if (drone?.home) { if (markers.current.home) markers.current.home.setLngLat(drone.home); else markers.current.home = new lib.Marker({ element: pin('H', 'home'), anchor: 'center' }).setLngLat(drone.home).addTo(m); }
+    else { markers.current.home?.remove(); delete markers.current.home; }
+    const wanted = new Set(stops.map(s => `${s.kind}:${s.label}`));
+    for (const [k, marker] of markers.current.stops) if (!wanted.has(k)) { marker.remove(); markers.current.stops.delete(k); }
+    for (const s of stops) { const k = `${s.kind}:${s.label}`, existing = markers.current.stops.get(k); if (existing) existing.setLngLat(s.point); else markers.current.stops.set(k, new lib.Marker({ element: pin(s.label, s.kind), anchor: 'bottom' }).setLngLat(s.point).addTo(m)); }
     if (here) {
       const mo = motion.current;
       if (!markers.current.drone) {
@@ -105,13 +103,13 @@ export default function DroneMap({ drone, a, b, pick, onPick }: Props) {
     } else { markers.current.drone?.remove(); delete markers.current.drone; motion.current.to = null; }
     const key = drone?.id ?? 'none';
     if (fitted.current !== key && (drone?.home || here)) { fitted.current = key; m.jumpTo({ center: here ?? drone!.home!, zoom: 16 }); }
-  }, [ready, drone, a, b]);
+  }, [ready, drone, stops, plan]);
 
   useEffect(() => { if (container.current) container.current.style.cursor = pick ? 'crosshair' : ''; const c = map.current?.getCanvas(); if (c) c.style.cursor = pick ? 'crosshair' : ''; }, [pick, ready]);
 
   function fit() {
     const m = map.current; if (!m) return;
-    const t = drone?.telemetry, pts = [drone?.home, t ? [t.lng, t.lat] as Point : null, a, b].filter(Boolean) as Point[];
+    const t = drone?.telemetry, pts = [drone?.home, t ? [t.lng, t.lat] as Point : null, ...stops.map(s => s.point)].filter(Boolean) as Point[];
     if (drone?.home) pts.push(...circle(drone.home, drone.geofenceM).geometry.coordinates[0].filter((_, i) => i % 18 === 0));
     if (!pts.length) return;
     const lngs = pts.map(p => p[0]), lats = pts.map(p => p[1]);
@@ -120,7 +118,7 @@ export default function DroneMap({ drone, a, b, pick, onPick }: Props) {
   function toggleFollow() { const next = !follow; followRef.current = next; setFollow(next); }
   return <>
     <div ref={container} className="fly-map" aria-label="Map of your drone, its safety zone and planned route" />
-    {pick && <div className="fly-pick-hint">Tap the map to place point <strong>{pick}</strong></div>}
+    {pick && <div className="fly-pick-hint">Tap the map to place <strong>{pick}</strong></div>}
     <div className="map-controls fly-map-controls">
       <button aria-label="Zoom in" onClick={() => map.current?.zoomIn()}><Plus size={19} /></button>
       <button aria-label="Zoom out" onClick={() => map.current?.zoomOut()}><Minus size={19} /></button><span />

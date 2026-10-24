@@ -14,6 +14,7 @@ const move = (p: Point, heading: number, m: number): Point => { const r = headin
 const home: Point = [homeLng, homeLat];
 let p: Point = home, alt = 0, heading = 0, speed = 0, battery = 100, armed = false, mode = 'GUIDED', state: DroneState = 'landed', message = 'Simulated drone ready.';
 let route: FlyRoute | null = null, wp = 0, active: string | null = null, action: 'idle' | 'takeoff' | 'goto' | 'hold' | 'land' | 'rtl' = 'idle';
+let payload: 'loaded' | 'empty' = 'empty', releaseOnLanding = false;
 let acks: { commandId: string; status: 'accepted' | 'done' | 'failed'; message?: string }[] = [];
 const seen = new Set<string>();
 const ack = (commandId: string | null, status: 'accepted' | 'done' | 'failed', text: string) => { if (commandId) acks.push({ commandId, status, message: text }); message = text; console.log(`${status.padEnd(8)} ${text}`); };
@@ -21,13 +22,15 @@ const ack = (commandId: string | null, status: 'accepted' | 'done' | 'failed', t
 function handle(c: { id: string; type: string; params: FlyRoute | null }) {
   if (seen.has(c.id)) return; seen.add(c.id);
   if (c.type === 'PING') return ack(c.id, 'done', 'Pong from the simulated drone.');
-  if (active && route) ack(active, 'failed', `Replaced by ${c.type}.`);
-  route = null; active = c.id;
+  if (active) ack(active, 'failed', `Replaced by ${c.type}.`);
+  route = null; active = c.id; releaseOnLanding = false;
   if (c.type === 'HOLD') { action = 'hold'; mode = 'LOITER'; state = alt > 0.1 ? 'holding' : 'landed'; active = null; return ack(c.id, 'done', 'Holding position.'); }
   if (c.type === 'LAND') { action = 'land'; mode = 'LAND'; state = 'landing'; return ack(c.id, 'accepted', 'Landing now.'); }
   if (c.type === 'RTL') { action = 'rtl'; mode = 'RTL'; state = 'returning'; return ack(c.id, 'accepted', 'Returning home.'); }
   if (c.type === 'FLY_ROUTE' && c.params) {
     route = c.params; wp = 0; mode = 'GUIDED';
+    // A drop-off leg means a person already confirmed loading at the pickup.
+    if (route.release) { payload = 'loaded'; releaseOnLanding = route.land; }
     if (!armed) { armed = true; action = 'takeoff'; state = 'taking_off'; } else { action = 'goto'; state = 'en_route'; }
     return ack(c.id, 'accepted', `Flying ${route.waypoints.length} waypoint(s) at ${route.altM} m.`);
   }
@@ -48,10 +51,10 @@ function step(dt: number) {
     }
   } else if (action === 'rtl') { if (distance(p, home) > 1) { climb(Math.max(alt, 30)); towards(home, 8); } else action = 'land'; }
   else if (action === 'hold') speed = 0;
-  if (action === 'land') { speed = 0; alt = Math.max(0, alt - 1.5 * dt); if (alt <= 0.05) { alt = 0; armed = false; action = 'idle'; mode = 'GUIDED'; state = 'landed'; ack(active, 'done', 'Landed.'); active = null; route = null; } }
+  if (action === 'land') { speed = 0; alt = Math.max(0, alt - 1.5 * dt); if (alt <= 0.05) { alt = 0; armed = false; action = 'idle'; mode = 'GUIDED'; state = 'landed'; if (releaseOnLanding) { payload = 'empty'; releaseOnLanding = false; ack(active, 'done', 'Landed. Package released.'); } else ack(active, 'done', 'Landed.'); active = null; route = null; } }
 }
 
-const telemetry = (): Telemetry => ({ lat: p[1], lng: p[0], altM: +alt.toFixed(2), headingDeg: +heading.toFixed(1), groundSpeedMs: +speed.toFixed(2), batteryPct: +battery.toFixed(1), gpsFix: 3, satellites: 14, armed, mode, state, flightAllowed: true, link: 'sim', activeCommandId: active, waypointIndex: route ? wp : null, message, simulated: true, agentVersion: 'fake-1.0' });
+const telemetry = (): Telemetry => ({ lat: p[1], lng: p[0], altM: +alt.toFixed(2), headingDeg: +heading.toFixed(1), groundSpeedMs: +speed.toFixed(2), batteryPct: +battery.toFixed(1), gpsFix: 3, satellites: 14, armed, mode, state, flightAllowed: true, link: 'sim', activeCommandId: active, waypointIndex: route ? wp : null, message, simulated: true, agentVersion: 'fake-1.1', payload });
 
 async function sync() {
   const sending = acks; acks = [];

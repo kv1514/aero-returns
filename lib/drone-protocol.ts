@@ -3,6 +3,7 @@
  * Every motion command is checked here on the server and again on the drone. */
 import { z } from 'zod';
 import { distance, pathDistance, type Point } from './simulation';
+import type { DeliveryJob } from './drone-jobs';
 
 export const ONLINE_MS = 10_000;
 export const FLY_EXPIRES_MS = 30_000;
@@ -41,6 +42,8 @@ export const telemetrySchema = z.object({
   message: z.string().max(200).optional(),
   simulated: z.boolean().default(false),
   agentVersion: z.string().max(32).optional(),
+  /** From a payload sensor or the gripper state when the drone has one; otherwise unknown. */
+  payload: z.enum(['loaded', 'empty', 'unknown']).default('unknown'),
 });
 export type Telemetry = z.infer<typeof telemetrySchema>;
 
@@ -56,6 +59,8 @@ export const flyRouteSchema = z.object({
   altM: z.number().finite().min(5).max(LEGAL_MAX_ALT_M),
   speedMs: z.number().finite().min(1).max(15).default(6),
   land: z.boolean().default(true),
+  /** After landing at the last waypoint, open the gripper to drop the package. */
+  release: z.boolean().default(false),
 });
 export type FlyRoute = z.infer<typeof flyRouteSchema>;
 
@@ -75,9 +80,14 @@ export const droneSettingsSchema = z.object({
 
 export type DroneConfig = { droneId: string; name: string; home: Point | null; geofenceM: number; maxAltM: number; minBatteryPct: number };
 export type DroneCommand = { id: string; type: CommandType; params: FlyRoute | null; status: CommandStatus; channel: 'internet' | 'sms'; createdAt: number; updatedAt: number; expiresAt: number; message: string | null; issuedBy?: string };
+export type DroneEvent = { id: string; jobId: string | null; kind: 'job' | 'command' | 'alert'; title: string; detail: string | null; at: number };
 export type DroneView = {
   id: string; name: string; role: 'owner' | 'pilot'; online: boolean; lastSeen: number | null; telemetry: Telemetry | null; trail: Point[];
   home: Point | null; geofenceM: number; maxAltM: number; phone: string | null; pilotCode: string | null; pilots: number; commands: DroneCommand[];
+  /** The active delivery, or the latest one from the last hour. */
+  job: DeliveryJob | null;
+  /** Newest first: delivery status changes, command results and drone alerts. */
+  events: DroneEvent[];
 };
 
 export const isSafety = (type: string): type is SafetyCommand => (SAFETY_COMMANDS as readonly string[]).includes(type);

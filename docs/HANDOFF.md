@@ -86,3 +86,32 @@ Branch `feature/live-drone-control` adds real drone control on a new **/fly** pa
 Verification on Windows: typecheck, build, 43 TypeScript tests (9 new), `scripts/drone-smoke.ts` (ownership, tokens, rotation, priorities, pilots, SMS), and a browser end-to-end flight with `scripts/fake-drone.ts`: create link → connect → pick B → takeoff → cruise → land → "done". Not yet run: `drone-agent/test_agent.py` (no local Python; it is wired into GitHub Actions), ArduPilot SITL, and real hardware.
 
 Windows note: deep checkout paths break npm and local D1. Map the folder to a drive letter (`subst R: <path>`), set `AERO_LOCAL_STATE` to a short folder (see `vite.config.ts`), and pass the same folder to `wrangler d1 execute --persist-to`.
+
+## Delivery jobs and status updates (October 24, 2026)
+
+Real-drone deliveries with package status updates, on top of the live link.
+
+- **Flow** (`lib/drone-jobs.ts`): Dispatched → On the way to pickup → Arrived at pickup → *person confirms loading* → Package picked up → Package in flight → Package delivered (landed, gripper released) → Drone returning home → Delivery complete. A failed leg becomes "Delivery needs attention" with Resume or Cancel.
+- **Server**: `POST /api/drones/:id/jobs` with `op: create | loaded | cancel | resume`. Legs are queued as commands tagged with `job_id`/`leg`. `/api/drone/sync` advances jobs from the drone's acks and queues the next leg in the same response. The `drone_events` status feed records job milestones, safety commands sent, and anything new the drone reports. `GET /api/drones?view=jobs` is a lightweight feed for the tracking page. Migration: `drizzle/0003_delivery_jobs.sql`.
+- **Drone**: `FLY_ROUTE` gains `release: true` on the drop-off leg. After touchdown the agent sends `MAV_CMD_DO_GRIPPER` (release) and acks "Landed. Package released.", or fails the leg if the gripper refuses. Telemetry adds `payload: loaded | empty | unknown`.
+- **UI**: on `/fly`, the Fly tab has **Delivery** (pick P and D, or "Use my latest return") and **Free flight** modes. A live delivery card shows a 6-step tracker, an in-card "Package is loaded" confirmation, Cancel and Resume. The status-update feed and toasts show every change. The tracking page shows a "LIVE DRONE" banner that links to `/fly`.
+- **Fixed**: vinext `next/link` client navigation throws here ("RSC prefetch setup error"), so internal links are plain `<a>` again; the earlier `/fly` links didn't navigate.
+
+Verification: typecheck, build, 49 TypeScript tests (6 new job tests), all four HTTP smoke suites (the drone smoke now covers a full delivery, resume and cancel over the device protocol), 15 Python agent tests (2 new: pickup→drop-off release, jammed gripper; run in CI), and a browser end-to-end delivery with `scripts/fake-drone.ts`. Not yet: ArduPilot SITL with `GRIPPER_ENABLE`, real hardware.
+
+## Running it on another computer
+
+GitHub stores the code; it doesn't host the website. To see it elsewhere, either run it locally or deploy it.
+
+```sh
+git clone https://github.com/kv1514/aero-returns.git && cd aero-returns
+git checkout feature/live-drone-control
+npm ci
+npm run build
+# Apply each migration once (0000 → 0003) to a fresh local database:
+for f in drizzle/000*.sql; do node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file "$f"; done
+npm run dev        # http://127.0.0.1:5173 (or: npm start for the production build)
+node_modules/.bin/tsx scripts/fake-drone.ts --server http://127.0.0.1:5173 --token <token from /fly>
+```
+
+On Windows with a deep folder path, see the Windows note in the live drone section above. The hosted Site (`aero-returns-kv15…chatgpt.site`) only changes when the owner republishes it after merging.
