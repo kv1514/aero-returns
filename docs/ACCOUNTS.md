@@ -53,4 +53,10 @@ Amazon profile: https://developer.amazon.com/docs/login-with-amazon/customer-pro
 
 ## Setup status
 
-Source integration is implemented. Live Supabase project/provider configuration is pending the owner's selected organization. The connected account listed only SideSpace; the owner requested another organization. Do not reuse SideSpace projects without authorization. No Supabase project, paid plan, or OAuth credential was created in this update.
+Supabase is provisioned and connected to the deployed app. Organization: AERO (`ngorkhrgbaadljsezvou`, Free plan). Project: AERO (`hkmeykcgwnaatkzgukth`, `us-west-1`, healthy). The app's runtime URL and publishable key are configured; privileged keys are not used. The Site URL and exact hosted callback above are saved in Supabase.
+
+The `amazon-userinfo` Edge Function is deployed (version 1). Live checks confirm missing/invalid tokens return 401, unsupported methods return 405, and responses have `Cache-Control: no-store`. Successful Amazon authentication is still unverified.
+
+Google Cloud project `aero-sign-in` (AERO Sign In) has been created without attaching billing. Consent-screen registration is prepared for an external testing audience, pending the owner's agreement to Google's API Services User Data Policy. The web OAuth client has not yet been created. Amazon Developer is waiting for the owner to sign in before a security profile can be registered.
+
+Both app provider flags remain false. Do not enable either until its client credentials, Supabase provider settings, and login flow are verified. Do not reuse SideSpace projects or the Maps Demo Project for this setup.
