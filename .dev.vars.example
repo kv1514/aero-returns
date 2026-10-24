@@ -3,3 +3,11 @@ ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-5-5
 APIFY_TOKEN=
 APIFY_ACTOR_ID=
+
+# Browser-restricted key only; exposed intentionally to the Maps JavaScript SDK.
+GOOGLE_MAPS_BROWSER_KEY=
+GOOGLE_MAPS_MAP_ID=DEMO_MAP_ID
+# Login with Amazon profile linking (not order/return API access).
+AMAZON_CLIENT_ID=
+AMAZON_CLIENT_SECRET=
+AMAZON_REDIRECT_URI=https://aero-returns-kv15.kveldanda10.chatgpt.site/api/amazon/callback

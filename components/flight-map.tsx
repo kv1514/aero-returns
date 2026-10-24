@@ -1,99 +1,25 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { Crosshair, Plus, Minus, Maximize, Navigation, Layers, MapPin } from 'lucide-react';
-import type { Map as MapLibreMap, GeoJSONSource, Marker } from 'maplibre-gl';
-import { snapshot, routes, FACILITIES, type ReturnRecord } from '@/lib/simulation';
-import { droneMarkerSvg } from './drone';
-import 'maplibre-gl/dist/maplibre-gl.css';
-
-const line = (coordinates: number[][]) => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates } });
-export default function FlightMap({ record, clockOffset, stale, frozenAt, booking, onPin }: {record: ReturnRecord; clockOffset: number; stale: boolean; frozenAt: number; booking: boolean; onPin: (p: [number,number]) => void}) {
-  const container = useRef<HTMLDivElement>(null), map = useRef<MapLibreMap | null>(null), drone = useRef<Marker | null>(null), markers = useRef<Marker[]>([]);
-  const current = useRef({record, clockOffset, stale, frozenAt}); current.current = {record, clockOffset, stale, frozenAt};
-  const choose = useRef({booking, onPin}); choose.current = {booking, onPin};
-  const followRef = useRef(false), [follow, setFollow] = useState(false), [cinematic, setCinematic] = useState(false), [ready, setReady] = useState(false), [fallback, setFallback] = useState(false);
-  const [fallbackTime,setFallbackTime] = useState(0);
-  useEffect(()=>{if(ready)return;const timer=setInterval(()=>setFallbackTime(Date.now()),250);return()=>clearInterval(timer);},[ready]);
-  const fallbackSnapshot=snapshot(record,stale?frozenAt:(fallbackTime||record.anchor)+clockOffset);
-  const fallbackPath=[...fallbackSnapshot.path.inbound,...fallbackSnapshot.path.outbound.slice(1)];
-  const west=Math.min(...fallbackPath.map(p=>p[0])),east=Math.max(...fallbackPath.map(p=>p[0]));
-  const north=Math.max(...fallbackPath.map(p=>p[1])),south=Math.min(...fallbackPath.map(p=>p[1]));
-  const project=([lng,lat]:readonly number[])=>[650+(lng-west)/Math.max(.01,east-west)*600,260+(north-lat)/Math.max(.01,north-south)*350];
-  const projectedDrone=project(fallbackSnapshot.point);
-  function fit() {
-    const path = routes(current.current.record), coords = [...path.inbound, ...path.outbound], mobile = window.innerWidth < 760;
-    map.current?.fitBounds([[Math.min(...coords.map(p=>p[0]))-.002, Math.min(...coords.map(p=>p[1]))-.001],[Math.max(...coords.map(p=>p[0]))+.002, Math.max(...coords.map(p=>p[1]))+.001]], {padding: mobile ? {left:35,right:35,top:100,bottom:340} : {left:475,right:150,top:160,bottom:180}, duration: 1300, maxZoom:14.5, pitch:0, bearing:0});
-    followRef.current = false; setFollow(false); setCinematic(false);
-  }
-  useEffect(() => {
-    let disposed = false, frame = 0, mapInstance: MapLibreMap | undefined;
-    const timer = setTimeout(()=>{if (!map.current?.loaded()) setFallback(true);}, 12000);
-    import('maplibre-gl').then(ml=>{
-      if (disposed || !container.current) return;
-      try {
-        const m = new ml.Map({container: container.current, center: [-122.279,37.873], zoom:14, attributionControl:false, style: { version:8, sources:{carto:{type:'raster',tiles:['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],tileSize:256,attribution:'© OpenStreetMap © CARTO'}},layers:[{id:'basemap',type:'raster',source:'carto',paint:{'raster-saturation':-.65,'raster-contrast':-.08}}]}, maxPitch:60 });
-        map.current = m; mapInstance=m;
-        m.on('load',()=>{
-          if(disposed)return; clearTimeout(timer); setReady(true); setFallback(false);
-          m.addSource('route',{type:'geojson',data:line([[0,0],[0,0]])});
-          m.addLayer({id:'route-halo',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#fff','line-width':10,'line-opacity':.9}});
-          m.addLayer({id:'route-upcoming',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#4f88f5','line-width':4,'line-dasharray':[1.4,1.8],'line-opacity':.72}});
-          m.addSource('completed',{type:'geojson',data:line([[0,0],[0,0]])});
-          m.addLayer({id:'route-traveled',type:'line',source:'completed',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2563eb','line-width':5}});
-          const el=document.createElement('div');el.className='drone-map-marker';el.innerHTML=`<div class="drone-pulse"></div><div class="drone-graphic">${droneMarkerSvg}</div><span class="drone-marker-label">AERO–104 <i></i></span>`;
-          drone.current=new ml.Marker({element:el,rotationAlignment:'map'}).setLngLat(snapshot(current.current.record,Date.now()+current.current.clockOffset).point).addTo(m);
-          fit();
-          let lastRoute=0, lastFollow=0, heading=0;
-          function animate(ts: number) {
-            if(disposed)return;
-            const c=current.current, now=c.stale ? c.frozenAt : Date.now()+c.clockOffset;
-            const s=snapshot(c.record,now);
-            drone.current?.setLngLat(s.point);
-            heading += (((s.heading-heading+540)%360)-180)*.09;
-            const graphic=el.querySelector<HTMLElement>('.drone-graphic');if(graphic)graphic.style.transform=`rotate(${heading}deg)`;
-            if(ts-lastRoute>100){
-              (m.getSource('route') as GeoJSONSource)?.setData(line([...s.path.inbound,...s.path.outbound.slice(1)]));
-              const completed=s.outbound?[...s.path.inbound,...s.completed.slice(1)]:s.completed;
-              (m.getSource('completed') as GeoJSONSource)?.setData(line(completed.length>1?completed:[...completed,...completed]));lastRoute=ts;
-            }
-            if(followRef.current&&ts-lastFollow>150){m.easeTo({center:s.point,duration:300,essential:true});lastFollow=ts;}
-            frame=requestAnimationFrame(animate);
-          }
-          frame=requestAnimationFrame(animate);
-        });
-        m.on('dragstart',()=>{followRef.current=false;setFollow(false);});
-        m.on('click',e=>{if(choose.current.booking)choose.current.onPin([e.lngLat.lng,e.lngLat.lat]);});
-      }catch{setFallback(true);}
-    }).catch(()=>setFallback(true));
-    return ()=>{disposed=true;clearTimeout(timer);cancelAnimationFrame(frame);markers.current.forEach(m=>m.remove());mapInstance?.remove();map.current=null;};
-  },[]);
-  useEffect(()=>{
-    if(!ready||!map.current)return;
-    let disposed=false;
-    import('maplibre-gl').then(ml=>{
-      if(disposed||!map.current)return;
-      markers.current.forEach(marker=>marker.remove());markers.current=[];
-      const facility=FACILITIES.find(f=>f.id===record.facilityId)!;
-      for(const [p,kind,label] of [[record.package.pickup,'home','Your pickup'],[facility.point,'hub',facility.name]] as const){
-        const element=document.createElement('div');element.className=`place-marker ${kind}`;
-        element.innerHTML=`<div>${kind==='home'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-8h6v8"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 7 9-4 9 4v13H3Z"/><path d="M8 20v-8h8v8M3 7h18"/></svg>'}</div><span></span>`;
-        element.querySelector('span')!.textContent=label;
-        markers.current.push(new ml.Marker({element,anchor:'center'}).setLngLat(p).addTo(map.current!));
-      }
-    });
-    return()=>{disposed=true;};
-  },[ready,record.id,record.package.pickup[0],record.package.pickup[1],record.facilityId]);
-  useEffect(()=>{if(ready)fit();},[record.id]);
-  function toggleFollow(){const next=!follow;setFollow(next);followRef.current=next;if(next)map.current?.easeTo({center:snapshot(record,Date.now()+clockOffset).point,zoom:15.3,padding:{left:window.innerWidth>760?350:0,right:0,top:0,bottom:window.innerWidth>760?0:250},duration:1000});}
-  function toggle3d(){const next=!cinematic;setCinematic(next);map.current?.easeTo({pitch:next?52:0,bearing:next?-25:0,duration:1200});}
-  return <>
-    <div className="map-fallback" aria-hidden="true"><svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice"><defs><pattern id="streets" width="84" height="64" patternTransform="rotate(-13)" patternUnits="userSpaceOnUse"><rect width="84" height="64" fill="#eef0ec"/><rect x="5" y="5" width="71" height="51" rx="3" fill="#e5e8e3"/><path d="M0 0h84M0 0v64" stroke="#fff" strokeWidth="7"/></pattern></defs><rect width="1600" height="1000" fill="url(#streets)"/><path d="M0 0H230L150 260l60 160L60 760 0 800Z" fill="#d7e6ea"/><path d="M1130 140h300v200h-300zM600 650h180v150H600z" fill="#dce8d5"/><g fill="#87918a" fontSize="21" fontFamily="sans-serif" letterSpacing="5"><text x="880" y="510">BERKELEY</text><text x="1190" y="240" fontSize="14">UC BERKELEY</text><text x="390" y="320" fontSize="14">WEST BERKELEY</text></g></svg></div>
-    <div ref={container} className={`flight-map ${fallback&&!ready?'unavailable':''}`} aria-label="Interactive Berkeley map showing simulated drone route" />
-    {!ready&&<svg className="fallback-flight" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-label="Offline schematic of the simulated drone route"><polyline points={fallbackPath.map(p=>project(p).join(',')).join(' ')} fill="none" stroke="white" strokeWidth="10"/><polyline points={fallbackPath.map(p=>project(p).join(',')).join(' ')} fill="none" stroke="#2563eb" strokeWidth="4" strokeDasharray="9 8"/>{[record.package.pickup,fallbackPath[fallbackPath.length-1]].map((p,i)=>{const [x,y]=project(p);return <g key={i} transform={`translate(${x} ${y})`}><circle r="20" fill={i?'#2563eb':'#192832'} stroke="white" strokeWidth="4"/><text textAnchor="middle" y="5" fill="white" fontSize="13">{i?'H':'P'}</text><text textAnchor="middle" y="39" fill="#192832" fontSize="15" fontWeight="600">{i?'Return hub':'Your pickup'}</text></g>;})}<g transform={`translate(${projectedDrone[0]} ${projectedDrone[1]})`}><circle r="29" fill="#fff" stroke="#c8d9ff" strokeWidth="3"/><g transform={`rotate(${fallbackSnapshot.heading})`}><path d="M-17-17 17 17M17-17-17 17" stroke="#1d2f42" strokeWidth="5"/>{[[-17,-17],[17,17],[-17,17],[17,-17]].map(([cx,cy],i)=><circle key={i} cx={cx} cy={cy} r="8" fill="none" stroke="#5f768b" strokeWidth="3"/>)}<rect x="-7" y="-10" width="14" height="20" rx="5" fill="#2563eb"/></g></g></svg>}
-    {fallback&&!ready&&<div className="map-offline"><MapPin size={15}/> Offline route view · simulation continues <button onClick={()=>location.reload()}>Retry map</button></div>}
-    <div className="map-intro"><div className="eyebrow"><span className="location-dot"/> BERKELEY, CALIFORNIA</div><h2>A little less on your to-do list.</h2></div>
-    <div className="map-controls"><button title="Zoom in" aria-label="Zoom in" onClick={()=>map.current?.zoomIn()}><Plus size={19}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>map.current?.zoomOut()}><Minus size={19}/></button><span/><button title="Fit entire route" aria-label="Fit entire route" onClick={fit}><Maximize size={18}/></button><button title="Follow drone" aria-label="Follow drone" aria-pressed={follow} className={follow?'active':''} onClick={toggleFollow}><Crosshair size={19}/></button></div>
-    <div className="map-view-controls"><button className={cinematic?'selected':''} onClick={toggle3d}><Layers size={16}/>{cinematic?'2D map':'3D view'}</button><button className={follow?'selected':''} onClick={toggleFollow}><Navigation size={15}/>{follow?'Following drone':'Follow drone'}</button></div>
-    <div className="map-attribution"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a> · <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">© CARTO</a></div>
-  </>;
+import {useEffect,useRef,useState} from 'react';
+import {Crosshair,Plus,Minus,Maximize,Layers,Navigation} from 'lucide-react';
+import MapLibreFlightMap from './maplibre-flight-map';
+import {loadGoogle,type GoogleConfig,type GMap,type GMarker,type GLine} from '@/lib/google-maps';
+import {latLng} from '@/lib/location';
+import {snapshot,routes,FACILITIES,type ReturnRecord} from '@/lib/simulation';
+import {droneMarkerSvg} from './drone';
+type Props={record:ReturnRecord;clockOffset:number;stale:boolean;frozenAt:number;booking:boolean;onPin:(p:[number,number])=>void;config:GoogleConfig;onConfigure:()=>void};
+export default function FlightMap(props:Props){const [error,setError]=useState('');useEffect(()=>{const fail=()=>setError('Google rejected the key. Check its website restrictions, enabled APIs, and billing.');window.addEventListener('aero:google-auth-error',fail);return()=>window.removeEventListener('aero:google-auth-error',fail);},[]);if(!props.config.key||error)return <><MapLibreFlightMap {...props}/>{error&&<div className="google-map-error" role="alert">{error}<button onClick={props.onConfigure}>Maps settings</button></div>}</>;return <GoogleFlightMap {...props} onError={setError}/>;}
+function GoogleFlightMap({record,clockOffset,stale,frozenAt,config,onError}:Props&{onError:(s:string)=>void}){
+ const container=useRef<HTMLDivElement>(null),map=useRef<GMap|null>(null),current=useRef({record,clockOffset,stale,frozenAt}),followRef=useRef(false);current.current={record,clockOffset,stale,frozenAt};
+ const [ready,setReady]=useState(false),[follow,setFollow]=useState(false),[tilted,setTilted]=useState(false);
+ async function fit(){const g=await loadGoogle(config.key);if(!map.current)return;const b=new g.LatLngBounds();const p=routes(current.current.record);[...p.inbound,...p.outbound].forEach(p=>b.extend(latLng(p)));map.current.fitBounds(b,innerWidth<760?{left:35,right:35,top:95,bottom:340}:{left:475,right:310,top:150,bottom:205});followRef.current=false;setFollow(false);setTilted(false);map.current.setTilt(0);map.current.setHeading(0);}
+ useEffect(()=>{let disposed=false,frame=0;let markers:GMarker[]=[],lines:GLine[]=[];loadGoogle(config.key).then(g=>{if(disposed||!container.current)return;const m=new g.Map(container.current,{center:latLng(record.package.pickup),zoom:14,mapId:config.mapId||'DEMO_MAP_ID',disableDefaultUI:true,clickableIcons:false,gestureHandling:'greedy'});map.current=m;
+ const droneEl=document.createElement('div');droneEl.className='drone-map-marker';droneEl.innerHTML=`<div class="drone-pulse"></div><div class="drone-graphic">${droneMarkerSvg}</div><span class="drone-marker-label">AERO–104</span>`;
+ const drone=new g.marker.AdvancedMarkerElement({map:m,position:latLng(record.package.pickup),title:'Simulated AERO drone',content:droneEl});markers.push(drone);
+ for(const [point,label]of [[record.package.pickup,'Your pickup'],[FACILITIES.find(f=>f.id===record.facilityId)!.point,'Demo return hub']] as const){const content=document.createElement('div');content.className='google-place-pin';content.textContent=label;markers.push(new g.marker.AdvancedMarkerElement({map:m,position:latLng(point),title:label,content}));}
+ const all=new g.Polyline({map:m,strokeColor:'#7da5f7',strokeWeight:5,strokeOpacity:.8}),done=new g.Polyline({map:m,strokeColor:'#2563eb',strokeWeight:6});lines=[all,done];
+ m.addListener('dragstart',()=>{followRef.current=false;setFollow(false);});setReady(true);void fit();let last=0,lastFollow=0;
+ const animate=(ts:number)=>{if(disposed)return;const c=current.current,s=snapshot(c.record,c.stale?c.frozenAt:Date.now()+c.clockOffset);drone.position=latLng(s.point);const graphic=droneEl.querySelector<HTMLElement>('.drone-graphic');if(graphic)graphic.style.transform=`rotate(${s.heading}deg)`;if(ts-last>150){all.setPath([...s.path.inbound,...s.path.outbound.slice(1)].map(latLng));done.setPath((s.outbound?[...s.path.inbound,...s.completed.slice(1)]:s.completed).map(latLng));last=ts;}if(followRef.current&&ts-lastFollow>250){m.panTo(latLng(s.point));lastFollow=ts;}frame=requestAnimationFrame(animate);};frame=requestAnimationFrame(animate);
+ }).catch(e=>{if(!disposed)onError(e.message);});return()=>{disposed=true;cancelAnimationFrame(frame);markers.forEach(m=>m.map=null);lines.forEach(l=>l.setMap(null));if(map.current)window.google?.maps.event.clearInstanceListeners(map.current);map.current=null;};},[config.key,config.mapId,record.id]);
+ const toggleFollow=()=>{followRef.current=!follow;setFollow(!follow);if(!follow)map.current?.setZoom(16);};
+ return <><div ref={container} className="flight-map google-flight-map" aria-label="Google map showing the simulated drone route"/><div className="map-intro"><div className="eyebrow"><span className="location-dot"/>BERKELEY · GOOGLE MAPS</div><h2>A little less on your to-do list.</h2></div>{!ready&&<div className="google-map-error">Loading Google Maps…</div>}<div className="map-controls"><button aria-label="Zoom in" onClick={()=>map.current?.setZoom((map.current.getZoom()||14)+1)}><Plus size={19}/></button><button aria-label="Zoom out" onClick={()=>map.current?.setZoom((map.current.getZoom()||14)-1)}><Minus size={19}/></button><span/><button aria-label="Fit entire route" onClick={()=>void fit()}><Maximize size={18}/></button><button aria-label="Follow drone" aria-pressed={follow} onClick={toggleFollow}><Crosshair size={19}/></button></div><div className="map-view-controls"><button onClick={()=>{setTilted(!tilted);map.current?.setTilt(tilted?0:45);map.current?.setHeading(tilted?0:-25);}}><Layers size={16}/>{tilted?'2D map':'Tilt map'}</button><button onClick={toggleFollow}><Navigation size={15}/>{follow?'Following drone':'Follow drone'}</button></div></>;
 }

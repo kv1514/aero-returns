@@ -1,0 +1,12 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {loadGoogle,type GoogleConfig,type GMap,type GMarker} from '@/lib/google-maps';
+import {latLng} from '@/lib/location';
+import type {Point} from '@/lib/simulation';
+const EMPTY_PLACES:{id:string;name:string;point:Point}[]=[];
+export default function GoogleMiniMap({config,center,places=EMPTY_PLACES,onPin}:{config:GoogleConfig;center:Point;places?:{id:string;name:string;point:Point}[];onPin?:(p:Point)=>void}){
+ const box=useRef<HTMLDivElement>(null),map=useRef<GMap|null>(null),markers=useRef<GMarker[]>([]),callback=useRef(onPin);callback.current=onPin;const [ready,setReady]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{let disposed=false;const fail=()=>setError('Google Maps could not authorize this key. Check Maps settings.');window.addEventListener('aero:google-auth-error',fail);loadGoogle(config.key).then(g=>{if(disposed||!box.current)return;map.current=new g.Map(box.current,{center:latLng(center),zoom:14,mapId:config.mapId,streetViewControl:false,mapTypeControl:false,fullscreenControl:false,gestureHandling:'cooperative'});map.current.addListener('click',e=>{if(e.latLng)callback.current?.([e.latLng.lng(),e.latLng.lat()]);});setReady(true);}).catch(e=>{if(!disposed)setError(e.message);});return()=>{disposed=true;window.removeEventListener('aero:google-auth-error',fail);markers.current.forEach(m=>m.map=null);if(map.current)window.google?.maps.event.clearInstanceListeners(map.current);map.current=null;};},[config.key,config.mapId]);
+ useEffect(()=>{if(!ready||!map.current)return;const g=window.google!.maps;markers.current.forEach(m=>m.map=null);const all=[{id:'center',name:'Search / pickup location',point:center},...places];const bounds=new g.LatLngBounds();markers.current=all.map((p,i)=>{bounds.extend(latLng(p.point));const content=document.createElement('div');content.className=`nearby-map-pin ${i===0?'origin':''}`;content.textContent=i===0?'●':String(i);return new g.marker.AdvancedMarkerElement({map:map.current,position:latLng(p.point),title:p.name,content});});if(places.length)map.current.fitBounds(bounds,45);else{map.current.setCenter(latLng(center));map.current.setZoom(15);}},[ready,center[0],center[1],places]);
+ return <div className="mini-map-wrap"><div ref={box} className="pickup-google-map" aria-label={onPin?'Choose a pickup point on Google Maps':'Google Maps nearby results'}/>{error&&<p className="error-note" role="alert">{error}</p>}</div>;
+}

@@ -2,6 +2,8 @@
 
 A map-first, end-to-end **simulated** drone returns app for the Cal Hacks 13.0 demo. The app lives separately from the parent arbitrage engine. It never sends physical flight commands, creates a carrier return, charges a payment method, or approves a retailer refund.
 
+Continuing with Claude? Start with [`CLAUDE.md`](CLAUDE.md) and [`docs/HANDOFF.md`](docs/HANDOFF.md) for current status, setup, verification, and next steps.
+
 ## Run locally
 
 Node 22.13+ is required. Node 24 is recommended.
@@ -11,6 +13,7 @@ npm ci
 npm run db:generate   # only when changing db/schema.ts; initial migration is committed
 npm run build
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_uneven_violations.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_many_chimera.sql
 npm run dev
 ```
 
@@ -63,7 +66,7 @@ Only the core DB binding is required; `.openai/hosting.json` declares it. Missin
 - `lib/simulation.ts`: pure flight model, route calculations, state transitions, facility eligibility, pricing estimates, event generation.
 - `lib/server.ts`: validated booking/control HTTP operations, owner scoping, version compare-and-set persistence.
 - `db/schema.ts` and `drizzle/`: D1 records and integration audit schema.
-- `components/flight-map.tsx`: MapLibre display with frame-based motion; camera/zoom/follow controls.
+- `components/flight-map.tsx` and `components/maplibre-flight-map.tsx`: Google/MapLibre display with frame-based motion; camera/zoom/follow controls.
 - `components/booking.tsx`, `components/aero-app.tsx`: complete consumer journey.
 - `components/return-assistant.tsx`: live product enrichment/photo review, transparent sample output, setup states.
 - `lib/integration-server.ts`: server-only provider calls, bounded usage, validation, live audit results.
@@ -79,6 +82,7 @@ npm test
 python3 tests/test_product_actor.py
 # With local server running:
 node_modules/.bin/tsx scripts/smoke.ts
+node_modules/.bin/tsx scripts/location-account-smoke.ts
 ```
 
 Tests cover distance, route interpolation, compatibility, explicit pickup gating, complete handoff, pause/resume/speed changes, persistence, interruption, cancellation, review uncertainty, URL allowlisting, and Actor extraction. The HTTP smoke test creates a demo return and checks session isolation, the full journey, and persistence. Tests never call Anthropic or Apify. Live credentialed verification remains separate.
@@ -90,3 +94,29 @@ A real service needs an authenticated telemetry adapter, reliable command/ack pr
 ## Cal Hacks submission
 
 The research snapshot is dated October 23, 2026. Read `/demo` and `data/hackathon-tracks.json` for all 58 current Hive cards. Confirm unresolved prize conflicts and entry rules directly with organizers. Deadline listed on [Devpost](https://cal-hacks-13-0.devpost.com/): October 25 at 9 a.m. Pacific. No interviews, Figma work, Notability history, sponsor API calls, or physical flights should be claimed unless the team actually completes and records them.
+
+## Google Maps, location, and nearby drop-offs
+
+Open **Maps** below the tracking actions. Paste a website-restricted Google Maps browser API key; it is kept in this tab's session storage and applied on reload. The optional Map ID defaults to Google's `DEMO_MAP_ID`. For a shared hosted configuration, set `GOOGLE_MAPS_BROWSER_KEY` and `GOOGLE_MAPS_MAP_ID` through Sites runtime variables and redeploy. A browser key is intentionally delivered to the client; never put a general-purpose server credential in this field.
+
+Enable **Maps JavaScript API**, **Geocoding API**, and **Places API (New)**, with billing enabled. Restrict the key to those APIs and website referrers `https://aero-returns-kv15.kveldanda10.chatgpt.site/*` and optionally `http://127.0.0.1:5173/*`. Set quotas and billing alerts in Google Cloud. No Google key is bundled in source. Setup: [Google key guidance](https://developers.google.com/maps/api-security-best-practices).
+
+With a key, tracking uses Google Maps and advanced markers. Without a key, or after a loading/authorization failure, the existing MapLibre demo remains available. Booking supports one-time browser geolocation, accuracy feedback, Google address search, and selecting a pickup pin. Location permission is requested only after a button click. Coordinates are sent to Google only when Google features are used. A confirmed pickup is saved with a booking; there is no background location watch or tracking of other people. Bookings remain inside the Berkeley demo area, and no low-accuracy device fix is accepted without manual refinement.
+
+**Nearby drop-offs** searches the current pickup, the user's opt-in device location, or an entered address/city. Categories are UPS drop-offs, other shipping drop-offs, and warehouses. Google's [Text Search (New)](https://developers.google.com/maps/documentation/javascript/place-search) returns up to 20 candidates, filtered to the selected 5/10/25 km radius and sorted by straight-line distance. A listing is not evidence of QR acceptance, public access, or drone participation. Warehouses are explicitly marked as potentially private. Places are displayed on Google Maps with hours/details and directions links; search locations and results are memory-only, never stored as participating hubs. No seeded listings are substituted for a failed API call.
+
+## Amazon account connection
+
+**Amazon** opens a profile-linking and return-import flow. Standard [Login with Amazon profile scopes](https://developer.amazon.com/docs/login-with-amazon/customer-profile.html) do not authorize access to personal purchases or return creation. AERO does not scrape authenticated Amazon pages or collect Amazon passwords. Users start/approve the return on Amazon's Your Orders page, then import its reference and QR/label method into booking. The existing QR upload reads locally; opaque retailer codes still require manual review.
+
+To enable real profile linking, register a Login with Amazon Security Profile and configure:
+
+- `AMAZON_CLIENT_ID`
+- `AMAZON_CLIENT_SECRET` (server-only)
+- `AMAZON_REDIRECT_URI=https://aero-returns-kv15.kveldanda10.chatgpt.site/api/amazon/callback`
+
+Add that exact callback to the Amazon app's allowed return URLs. Local testing needs its own registered callback, `http://127.0.0.1:5173/api/amazon/callback`, and matching local configuration. Use Amazon's [authorization code grant instructions](https://developer.amazon.com/docs/login-with-amazon/authorization-code-grant.html).
+
+OAuth uses PKCE S256, a one-time ten-minute state tied to the AERO owner and an HttpOnly SameSite cookie, strict request origins, and server-side token exchange. The linked name, email, and Amazon account identifier are stored privately; access and refresh tokens are discarded after profile retrieval. Disconnect removes AERO's profile association and outstanding link attempts. It does not revoke consent at Amazon. Missing credentials disable linking clearly while manual return import stays usable.
+
+Google API calls and Amazon sign-in require real credentials and have not been live-verified without them. Passing local tests does not establish provider account setup or retailer participation.

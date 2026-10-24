@@ -1,0 +1,5 @@
+export const AMAZON_CALLBACK_PATH='/api/amazon/callback';
+export const AMAZON_ORDERS_URL='https://www.amazon.com/gp/your-account/order-history';
+export async function pkceChallenge(verifier:string){const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));return btoa(String.fromCharCode(...new Uint8Array(digest))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');}
+export function validCallback(value:string){try{const url=new URL(value);return url.pathname===AMAZON_CALLBACK_PATH&&!url.search&&!url.hash&&!url.username&&!url.password&&(url.protocol==='https:'||(url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)));}catch{return false;}}
+export function amazonAuthorizeURL(clientId:string,redirect:string,state:string,challenge:string){if(!validCallback(redirect))throw new Error('Invalid Amazon callback');return 'https://www.amazon.com/ap/oa?'+new URLSearchParams({client_id:clientId,redirect_uri:redirect,response_type:'code',scope:'profile',state,code_challenge:challenge,code_challenge_method:'S256'});}
