@@ -15,4 +15,19 @@ class ProductActorTests(unittest.TestCase):
             with self.assertRaises(ValueError):actor.validate(url)
     def test_unknown_unit_is_unknown(self):
         self.assertIsNone(actor.measurement({'value':12,'unitText':'unknown'},'weight'))
+    def test_bad_source_values_are_unknown(self):
+        for value in [{'value':0.01,'unitCode':'GRM'},{'value':'inf','unitCode':'KGM'},{'value':float('inf'),'unitCode':'KGM'},{'value':'nan','unitCode':'KGM'},{'value':True,'unitCode':'KGM'},'0.0001g']:
+            self.assertIsNone(actor.measurement(value,'weight'),value)
+    def test_overflow_after_unit_scaling_is_unknown(self):
+        self.assertIsNone(actor.measurement({'value':1e307,'unitCode':'MTR'},'length'))
+    def test_infinity_literal_yields_valid_json(self):
+        import json
+        result=actor.extract('https://www.rei.com/p','<script type="application/ld+json">{"@type":"Product","name":"Tent","weight":{"value":Infinity,"unitCode":"KGM"}}</script>')
+        self.assertIsNone(result['weightKg']);json.dumps(result,allow_nan=False)
+    def test_odd_type_values_do_not_crash(self):
+        for t in ['null','3','{"x":1}']:
+            result=actor.extract('https://www.rei.com/p','<title>Page</title><script type="application/ld+json">{"@type":'+t+',"name":"X"}</script>')
+            self.assertEqual(result['title'],'Page')
+        result=actor.extract('https://www.rei.com/p','<script type="application/ld+json">{"@type":["Thing","Product"],"name":"Pack"}</script>')
+        self.assertEqual(result['title'],'Pack')
 if __name__=='__main__':unittest.main()

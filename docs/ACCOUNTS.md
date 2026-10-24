@@ -14,8 +14,8 @@ Set these through Sites runtime settings and redeploy. Do not commit values.
 - `SUPABASE_AMAZON_ENABLED=true`: only after the custom provider is configured and tested.
 - `SUPABASE_COOKIE_SECURE`: omit on hosted HTTPS; set `false` only for local HTTP.
 
-Supabase Site URL: `https://aero-returns-kv15.kveldanda10.chatgpt.site`.
-Allowed redirect URL: `https://aero-returns-kv15.kveldanda10.chatgpt.site/api/account/callback`.
+Supabase Site URL: `https://aero-returns.kv15.workers.dev` (the earlier ChatGPT Sites prototype used `https://aero-returns-kv15.kveldanda10.chatgpt.site`).
+Allowed redirect URL: `https://aero-returns.kv15.workers.dev/api/account/callback`. Add it in Supabase before enabling Google sign-in on the Worker.
 For local testing, separately allow `http://127.0.0.1:5173/api/account/callback`.
 
 The app uses the pinned `@supabase/ssr` SDK, PKCE, HttpOnly/SameSite cookies and server-side `getUser()` verification. Auth responses are no-store. POST sign-in and DELETE sign-out require the same origin; callbacks return only to the fixed AERO root. Failed identity verification never falls back to another owner's history. User metadata is display-only. Signing out clears the browser's Supabase session; it does not sign out of Google, Amazon, or the Sites hosting gate.

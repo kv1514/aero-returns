@@ -2,9 +2,9 @@ import { distance, type Point } from './simulation';
 export const DEMO_BOUNDS={west:-122.31,east:-122.24,south:37.85,north:37.90};
 export const inDemoArea=([lng,lat]:Point)=>Number.isFinite(lng)&&Number.isFinite(lat)&&lng>=DEMO_BOUNDS.west&&lng<=DEMO_BOUNDS.east&&lat>=DEMO_BOUNDS.south&&lat<=DEMO_BOUNDS.north;
 export const latLng=([lng,lat]:Point)=>({lat,lng});
-export function locationError(code:number){return code===1?'Location permission was declined. You can search an address or use a demo location.':code===3?'Location took too long. Try again outdoors or enter an address.':'Your device could not determine a location. Try an address instead.';}
+export function locationError(code:number){return code===1?'Location permission was declined. Choose a location manually instead.':code===3?'Location took too long. Try again outdoors or choose a location manually.':'Your device could not determine a location. Choose a location manually instead.';}
 export function locateOnce():Promise<{point:Point;accuracy:number}>{return new Promise((resolve,reject)=>{
-  if(!globalThis.navigator?.geolocation){reject(new Error('Location is unavailable in this browser. Enter an address instead.'));return;}
+  if(!globalThis.navigator?.geolocation){reject(new Error('Location is unavailable in this browser. Choose a location manually instead.'));return;}
   navigator.geolocation.getCurrentPosition(p=>resolve({point:[p.coords.longitude,p.coords.latitude],accuracy:p.coords.accuracy}),e=>reject(new Error(locationError(e.code))),{enableHighAccuracy:true,timeout:15000,maximumAge:30000});
 });}
 export type NearbyPlace={id:string;name:string;address:string;point:Point;status:string;meters:number;url:string};

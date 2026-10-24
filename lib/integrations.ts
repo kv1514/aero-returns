@@ -6,6 +6,7 @@ export function gateReview(raw:unknown): Review {
   if(review.confidence<.85||review.fraudFlags.length||!review.matchesProduct) return {...review,recommendation:'manual_review',explanation:`Human review required. ${review.explanation}`};
   return review;
 }
-export const SAMPLE_REVIEW:Review={matchesProduct:true,condition:'like_new',confidence:.92,issues:['Original packaging should be included.'],fraudFlags:[],recommendation:'approve',explanation:'Sample only: the illustrated item matches the description and shows no visible damage. Package measurements still need to pass the drone limits. This is not a retailer approval.'};
+export const SAMPLE_REVIEW:Review={matchesProduct:true,condition:'like_new',confidence:.92,issues:['Original packaging should be included.'],fraudFlags:[],recommendation:'approve',explanation:'Sample only: example output for a fictional like-new item. Your photos and description were not reviewed. Package measurements still need to pass the drone limits. This is not a retailer approval.'};
 export const ALLOWED_RETAILERS=['amazon.com','nike.com','zara.com','walmart.com','target.com','bestbuy.com','rei.com'];
-export function validProductURL(value:string){const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||u.port||!ALLOWED_RETAILERS.some(host=>u.hostname===host||u.hostname.endsWith('.'+host)))throw new Error('Use a public HTTPS product page from Amazon, Nike, Zara, Walmart, Target, Best Buy, or REI.');return u.toString();}
+const RETAILER_URL_HINT='Use a public HTTPS product page from Amazon, Nike, Zara, Walmart, Target, Best Buy, or REI.';
+export function validProductURL(value:string){let u:URL;try{u=new URL(value);}catch{throw new Error(`${RETAILER_URL_HINT} Paste the full https:// link.`);}if(u.protocol!=='https:'||u.username||u.password||u.port||!ALLOWED_RETAILERS.some(host=>u.hostname===host||u.hostname.endsWith('.'+host)))throw new Error(RETAILER_URL_HINT);return u.toString();}

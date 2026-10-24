@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { DEMO_PACKAGE, type ReturnRecord, type FlightState } from '../lib/simulation';
-const base=process.env.AERO_TEST_URL||'http://127.0.0.1:5173';
+const base=process.argv[2]||process.env.AERO_TEST_URL||'http://127.0.0.1:5173';
 let cookie='';
 async function req(path:string,method='GET',data?:unknown,anonymous=false){const response=await fetch(base+path,{method,headers:{'Content-Type':'application/json','Origin':base,...(!anonymous&&cookie?{Cookie:cookie}:{})},body:data?JSON.stringify(data):undefined});if(!cookie&&response.headers.get('set-cookie'))cookie=response.headers.get('set-cookie')!.split(';')[0];return {status:response.status,data:await response.json() as {record:ReturnRecord;returns:ReturnRecord[];telemetry:{state:FlightState};anthropic:boolean;error?:string}};}
 await req('/api/returns');

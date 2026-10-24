@@ -1,8 +1,10 @@
 # AERO — Returns, without the trip
 
-A map-first, end-to-end **simulated** drone returns app for the Cal Hacks 13.0 demo. The app lives separately from the parent arbitrage engine. It never sends physical flight commands, creates a carrier return, charges a payment method, or approves a retailer refund.
+A map-first drone returns app for the Cal Hacks 13.0 demo. Returns run on a deterministic **simulation** by default, and an owner-registered **PX4 or ArduPilot drone** can fly a real return through the signed drone link ([`docs/DRONE_LINK.md`](docs/DRONE_LINK.md)). It never creates a carrier return, charges a payment method, or approves a retailer refund.
 
-Source: [kv1514/aero-returns](https://github.com/kv1514/aero-returns) (private). GitHub Actions runs typechecks, unit tests, Actor tests, and a build on changes.
+**Live app:** https://aero-returns.kv15.workers.dev · **Fleet console:** https://aero-returns.kv15.workers.dev/fleet
+
+Source: [kv1514/aero-returns](https://github.com/kv1514/aero-returns). GitHub Actions runs typechecks, unit tests, Actor tests, and a build on changes.
 
 Continuing with Claude? Start with [`CLAUDE.md`](CLAUDE.md) and [`docs/HANDOFF.md`](docs/HANDOFF.md) for current status, setup, verification, and next steps.
 
@@ -25,11 +27,11 @@ node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1
 npm run dev
 ```
 
-Local development prints its URL, normally `http://127.0.0.1:5173`. Hosted Sites provisions a separate D1 database and applies migrations during publication. No API keys are needed for the core demo. The `/demo` route contains the presentation script, actual integration status, checklist, and all 58 researched prize cards.
+Local development prints its URL, normally `http://127.0.0.1:5173`. Apply `drizzle/0002_drone_link.sql` the same way for the drone tables. Production runs on Cloudflare Workers + D1; `npm run deploy` builds, migrates and deploys (see [`docs/DEPLOY.md`](docs/DEPLOY.md)). No API keys are needed for the core demo. The `/demo` route contains the presentation script, actual integration status, checklist, and all 58 researched prize cards.
 
 ## What works
 
-- A full-screen MapLibre map using CARTO Positron raster tiles and OpenStreetMap data, with attribution. No map token is required. An animated schematic route keeps the demo usable if map initialization fails; geographic tiles require a network connection.
+- A full-screen MapLibre map using OpenFreeMap vector tiles (OpenMapTiles schema, OpenStreetMap data), with attribution. No map token is required. An animated schematic route keeps the demo usable if map initialization fails; geographic tiles require a network connection.
 - A deterministic, elapsed-time flight model with geographic distance, heading, continuous marker interpolation, altitude, speed, battery, ETA, and traveled/remaining route lines.
 - Pause, resume, 1×/5×/10× speed, next milestone, interruption/recovery, and reset controls. A normal demo takes about 3–5 minutes plus the user's pickup confirmation.
 - Booking with three Berkeley pickup choices, geolocation within the demo area, package details, QR image decoding, standard/priority capacity checks, and automatic compatible-facility ranking.
@@ -42,9 +44,11 @@ Local development prints its URL, normally `http://127.0.0.1:5173`. Hosted Sites
 
 ### Anthropic
 
-`POST /api/return-review` calls the official Claude Messages API with 1–3 resized photos and the product description. It validates the response, routes low-confidence or inconsistent evidence to human review, and saves the advisory result. AERO does not store the photos. A user explicitly starts the transmission, and the UI describes the third-party processing.
+`POST /api/return-review` calls Claude through the official `@anthropic-ai/sdk` (`lib/claude.ts`) with 1–3 resized photos and the product description. Requests use structured outputs (a JSON schema, so answers always parse), explicit effort, and server-side refusal fallback (`fallbacks: "default"`). It validates the response, routes low-confidence or inconsistent evidence to human review, and saves the advisory result. AERO does not store the photos. A user explicitly starts the transmission, and the UI describes the third-party processing.
 
-The default model is `claude-sonnet-5-5`, verified in the current [official model catalog](https://platform.claude.com/docs/en/models/overview). Override with `ANTHROPIC_MODEL` if sponsor access differs. A configured key is not labeled verified until a successful live result has been recorded. The sample-review button is clearly labeled and does not call an AI provider or qualify as sponsor usage.
+`POST /api/return-agent` is the **Claude return check** in booking: a tool-use loop where Claude calls AERO's own drone-limit rules (`check_drone_eligibility`) and, when Apify is configured, a product-spec lookup, then answers in a fixed schema (verdict, condition, checks, questions, merchant disposition). The server keeps the verdict consistent with the limits and sends uncertain, mismatched or possibly damaged items to a person. Such a return stays on the ground, simulated or live, until someone approves or declines it on the merchant desk (`/merchant`).
+
+The default model is `claude-opus-5-5` (see the [official model catalog](https://platform.claude.com/docs/en/models/overview)). Override with `ANTHROPIC_MODEL` if sponsor access differs. A configured key is not labeled verified until a successful live result has been recorded. The sample-review button is clearly labeled and does not call an AI provider or qualify as sponsor usage.
 
 ### Apify
 
@@ -54,7 +58,7 @@ Deploy the folder as an Actor in your Apify account, build it, and set `APIFY_AC
 
 ### Deliberate scope
 
-Return records use D1; optional social sign-in uses Supabase Auth. Convex is not used. It uses browser speech, not Cartesia or ElevenLabs. Nessie, Fetch/ASI:One, x402, and physical drone controls are **not implemented**. Merely referencing a sponsor in the research page is not a working integration. The current submission strategy prioritizes useful return workflows instead of unrelated tools. The broader household-drone plan remains a roadmap.
+Return records use D1; optional social sign-in uses Supabase Auth. Convex is not used. It uses browser speech, not Cartesia or ElevenLabs. Nessie, Fetch/ASI:One and x402 are **not implemented**. Physical flight goes only through the drone link and Fleet console described below, never from the simulator. Merely referencing a sponsor in the research page is not a working integration. The current submission strategy prioritizes useful return workflows instead of unrelated tools. The broader household-drone plan remains a roadmap.
 
 ## Environment variables
 
@@ -62,7 +66,7 @@ Set local secrets in ignored `.dev.vars` (example below); set hosted values thro
 
 ```dotenv
 ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-5-5
+ANTHROPIC_MODEL=claude-opus-5-5
 APIFY_TOKEN=
 APIFY_ACTOR_ID=
 ```
@@ -100,9 +104,11 @@ node_modules/.bin/tsx scripts/demo-account-smoke.ts
 
 Tests cover distance, route interpolation, compatibility, explicit pickup gating, complete handoff, pause/resume/speed changes, persistence, interruption, cancellation, review uncertainty, URL allowlisting, and Actor extraction. The HTTP smoke test creates a demo return and checks session isolation, the full journey, and persistence. Tests never call Anthropic or Apify. Live credentialed verification remains separate.
 
-## Real hardware later
+## Live drone (PX4 / ArduPilot)
 
-A real service needs an authenticated telemetry adapter, reliable command/ack protocol, a physical pickup interlock, flight authorization, airspace and site permissions, fleet dispatch, verified carrier/retailer acceptance, operational safety, privacy review, and real payments. Geodesic demo routes are not proof that a flight is legal or safe. The user's proposed indoor pad protocol is documented as a future boundary in `docs/DRONE_API.md`; no endpoint here accepts hardware commands.
+`/fleet` is the operator console. Register a drone, run the Python bridge on its companion computer ([`bridge/README.md`](bridge/README.md)) over 4G data or SMS, set the home point, pickup and drop pads on the map, complete the pre-flight checklist, and dispatch one of your returns. The drone flies home → pickup pad → drop pad → home one acknowledged step at a time; the customer confirms loading, and the operator launches every takeoff. Commands are HMAC-signed, expire, and are checked against the geofence and a 120 m cap on both the server and the bridge. Abort is always available, and the autopilot's own failsafes stay in charge if the link drops.
+
+Test with the bridge's `--vehicle fake` or PX4/ArduPilot SITL before flying. Outdoor flights must follow local rules (Part 107 or TRUST in the US, LAANC in controlled airspace, visual line of sight). A completed flight is not retailer acceptance or a refund.
 
 ## Cal Hacks submission
 
@@ -114,7 +120,7 @@ Open **Maps** below the tracking actions. Paste a website-restricted Google Maps
 
 The hosted prototype uses a [free Maps Demo Key](https://developers.google.com/maps/documentation/javascript/demo-key), configured in Sites runtime secrets, with no billing account enabled. Google caps daily usage and pauses requests at the limit without charges. This key is solely for testing and evaluation, not a real operational service. Google's demo console currently redirects Keys & Credentials to an upgrade prompt, so custom referrer restrictions were not configured. Do not upgrade or attach billing automatically.
 
-For a standard paid project, enable **Maps JavaScript API**, **Geocoding API v4**, and **Places API (New)**. Restrict its browser key to the required APIs and website referrers `https://aero-returns-kv15.kveldanda10.chatgpt.site/*` and optionally `http://127.0.0.1:5173/*`. Set quotas and billing alerts; budget alerts alone do not cap spending. No Google key is bundled in source. Setup: [Google key guidance](https://developers.google.com/maps/api-security-best-practices). Address and reverse lookup use the v4 HTTP API because the legacy JavaScript Geocoder is unavailable with the demo key.
+For a standard paid project, enable **Maps JavaScript API**, **Geocoding API v4**, and **Places API (New)**. Restrict its browser key to the required APIs and website referrers `https://aero-returns.kv15.workers.dev/*` and optionally `http://127.0.0.1:5173/*`. Set quotas and billing alerts; budget alerts alone do not cap spending. No Google key is bundled in source. Setup: [Google key guidance](https://developers.google.com/maps/api-security-best-practices). Address and reverse lookup use the v4 HTTP API because the legacy JavaScript Geocoder is unavailable with the demo key.
 
 With a key, tracking uses Google Maps and advanced markers. Without a key, or after a loading/authorization failure, the existing MapLibre demo remains available. Booking supports one-time browser geolocation, accuracy feedback, Google address search, and selecting a pickup pin. Location permission is requested only after a button click. Coordinates are sent to Google only when Google features are used. A booking draft, including the pickup, is kept in this tab’s session storage for recovery; the confirmed pickup is saved on the server only with a booking; there is no background location watch or tracking of other people. Bookings remain inside the Berkeley demo area, and no low-accuracy device fix is accepted without manual refinement.
 
@@ -128,7 +134,7 @@ To enable real profile linking, register a Login with Amazon Security Profile an
 
 - `AMAZON_CLIENT_ID`
 - `AMAZON_CLIENT_SECRET` (server-only)
-- `AMAZON_REDIRECT_URI=https://aero-returns-kv15.kveldanda10.chatgpt.site/api/amazon/callback`
+- `AMAZON_REDIRECT_URI=https://aero-returns.kv15.workers.dev/api/amazon/callback` (it must be on the same origin as the app)
 
 Add that exact callback to the Amazon app's allowed return URLs. Local testing needs its own registered callback, `http://127.0.0.1:5173/api/amazon/callback`, and matching local configuration. Use Amazon's [authorization code grant instructions](https://developer.amazon.com/docs/login-with-amazon/authorization-code-grant.html).
 
@@ -138,7 +144,7 @@ Google Maps rendering, address lookup, UPS and warehouse search have been verifi
 
 ## Earth, Street View, and social accounts
 
-**Earth & Street View** opens a photorealistic Google 3D explorer with pickup, current drone position, and simulated hub camera targets, plus an optional orbit. Google Earth and Street View open at the selected coordinates in separate tabs. Each nearby listing also has these links. Street View uses Google's key-free Maps URLs, so no paid panorama API is enabled. Imagery is recorded and is not live drone footage. Unsupported devices or quota limits show an external-view fallback.
+**Earth & Street View** opens a 3D explorer with pickup, current drone position, and hub (or live drop pad) camera targets, plus an optional orbit. With a Google key it uses Google's photorealistic 3D tiles; without one, or if they fail, it uses free OpenFreeMap Liberty tiles with OpenStreetMap 3D buildings. Google Earth and Street View open at the selected coordinates in separate tabs. Each nearby listing also has these links. Street View uses Google's key-free Maps URLs, so no paid panorama API is enabled. Imagery is recorded and is not live drone footage. Unsupported devices or quota limits show an external-view fallback.
 
 **Your account** includes Supabase-backed Google and Amazon sign-in. Provider buttons remain disabled until configured; no successful live social login is claimed. See [`docs/ACCOUNTS.md`](docs/ACCOUNTS.md) for exact callbacks, the Amazon userinfo adapter, ownership/security behavior, and pending setup. The private Site sharing gate remains separate.
 

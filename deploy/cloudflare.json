@@ -1,0 +1,9 @@
+{
+  "accountId": "b95d95dab97d2b2aca37039757747aca",
+  "worker": "aero-returns",
+  "d1": {
+    "binding": "DB",
+    "name": "aero-returns",
+    "id": "06305da8-0842-47fe-b467-90dad19a421e"
+  }
+}

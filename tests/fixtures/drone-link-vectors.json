@@ -1,0 +1,14 @@
+{
+  "master": "aero-test-master-secret-0123456789abcdef",
+  "droneId": "tst001",
+  "keyVersion": 1,
+  "key": "d9e8568ad7a072e871b3e0c175579e80bba76c178c9032e34c1c12153cea28c9",
+  "lines": {
+    "goto": "AC1 tst001 7 1761312400 GOTO 37.871234 -122.258901 30.0 ~72207200c7a7dbde",
+    "takeoff": "AC1 tst001 6 1761312400 TAKEOFF 30.0 ~af5eac1a61b77149",
+    "abort": "AC1 tst001 8 1761312400 ABORT ~dba82490a890c3af",
+    "telemetry": "AT1 tst001 1761312345123 1761312345 37.871234 -122.258901 29.8 87 213 11.8 3 14 ENROUTE GUIDED ~ed0b098475f5aa1e",
+    "ack": "AK1 tst001 1761312346000 1761312346 7 DONE ~9fdd24f6e1f4de95",
+    "rejected": "AK1 tst001 1761312347000 1761312347 9 REJECTED FENCE ~0fa6c5374121ac31"
+  }
+}

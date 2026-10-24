@@ -15,6 +15,11 @@ declare namespace Cloudflare {
     ANTHROPIC_MODEL?: string;
     APIFY_TOKEN?: string;
     APIFY_ACTOR_ID?: string;
+    DRONE_LINK_SECRET?: string;
+    TWILIO_ACCOUNT_SID?: string;
+    TWILIO_AUTH_TOKEN?: string;
+    TWILIO_FROM_NUMBER?: string;
+    AERO_TRUST_SITES_IDENTITY?: string;
     BUCKET?: R2Bucket;
   }
 }

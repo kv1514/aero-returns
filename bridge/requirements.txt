@@ -1,0 +1,4 @@
+# Only needed for --vehicle mavlink (pymavlink) and --transport sms (pyserial).
+# The fake vehicle, the HTTPS transport and the tests use the standard library only.
+pymavlink>=2.4.40
+pyserial>=3.5

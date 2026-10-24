@@ -1,6 +1,6 @@
 import {latLng,nearbyWithin,type NearbyPlace} from './location';
 import type {Point} from './simulation';
-export {geocode} from './geocoding';
+export {geocode,GeocodeError} from './geocoding';
 export type GoogleConfig={key:string;mapId:string};
 export type GLocation={lat():number;lng():number};
 type Listener={remove():void};

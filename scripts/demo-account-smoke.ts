@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {DEMO_PACKAGE,type ReturnRecord,type FlightState} from '../lib/simulation';
 type Result={record:ReturnRecord;telemetry:{state:FlightState};user:{name:string};demo:boolean;error?:string};
-const base=process.env.AERO_TEST_URL||'http://127.0.0.1:5173';
+const base=process.argv[2]||process.env.AERO_TEST_URL||'http://127.0.0.1:5173';
 const a=new Map<string,string>(),b=new Map<string,string>();
 async function req(jar:Map<string,string>,path:string,method='GET',data?:unknown,origin=base){
   const r=await fetch(base+path,{method,headers:{Origin:origin,'Content-Type':'application/json',Cookie:[...jar].map(([k,v])=>`${k}=${v}`).join('; ')},body:data===undefined?undefined:JSON.stringify(data)});

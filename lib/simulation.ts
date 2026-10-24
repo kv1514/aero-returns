@@ -1,7 +1,7 @@
 /** Deterministic demo flight model. No hardware or flight-control integrations. */
 export type Point = [number, number];
 export type FlightState = 'IDLE' | 'ASSIGNED' | 'PRE_FLIGHT' | 'EN_ROUTE_TO_PICKUP' | 'ARRIVED_AT_PICKUP' | 'AWAITING_PACKAGE' | 'PACKAGE_LOADED' | 'EN_ROUTE_TO_DROPOFF' | 'ARRIVED_AT_DROPOFF' | 'HANDOFF_PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-export type PackageInput = { retailer: string; method: 'qr' | 'label'; weight: number; dimensions: [number, number, number]; fragile: boolean; address: string; pickup: Point; instructions: string; service: 'standard' | 'priority'; returnReference?: string };
+export type PackageInput = { retailer: string; method: 'qr' | 'label'; weight: number; dimensions: [number, number, number]; fragile: boolean; address: string; pickup: Point; instructions: string; service: 'standard' | 'priority'; returnReference?: string; /** Booking-time only: id of this owner's Claude return check; the server verifies it and never stores it in the package. */ agentEventId?: string };
 export type Facility = { id: string; name: string; address: string; point: Point; retailers: string[]; methods: string[]; enabled: boolean; available: boolean; maxWeight: number };
 export const PICKUPS = [
   { address: '1820 Delaware Street, Berkeley', point: [-122.2764, 37.8738] as Point, label: 'North Berkeley' },
@@ -43,13 +43,21 @@ export function recommend(pkg: PackageInput) {
   const max = pkg.service === 'priority' ? 5 : 2.5, dimension = pkg.service === 'priority' ? 60 : 45;
   return FACILITIES.map(f => {
     const reason = !f.enabled ? 'Not enabled for drone handoff' : !f.available ? 'Currently unavailable' : !f.retailers.includes(pkg.retailer) ? 'Retailer not supported' : !f.methods.includes(pkg.method) ? 'Prepaid shipping label required' : pkg.weight > Math.min(max, f.maxWeight) ? `Exceeds ${Math.min(max, f.maxWeight)} kg payload limit` : pkg.dimensions.some(d => d > dimension) ? `Each dimension must be ≤ ${dimension} cm` : distance(pkg.pickup, f.point) > 6000 ? 'Outside the demo service area' : null;
-    const meters = distance(pkg.pickup, f.point), minutes = Math.ceil((distance(DISPATCH, pkg.pickup) + meters) / 12 / 60 + .5);
+    const meters = distance(pkg.pickup, f.point), minutes = Math.ceil((distance(DISPATCH, pkg.pickup) + meters) / (pkg.service === 'priority' ? 15 : 12) / 60 + .5);
     const price = Math.round((3.5 + meters / 1000 * 1.3 + (pkg.service === 'priority' ? 3 : 0)) * 100) / 100;
     return { ...f, reason, meters, minutes, price };
   }).sort((a, b) => Number(!!a.reason) - Number(!!b.reason) || a.price - b.price || a.minutes - b.minutes);
 }
 export type FlightEvent = { state: FlightState; title: string; at: number };
-export type ReturnRecord = { id: string; createdAt: number; anchor: number; elapsed: number; rate: number; paused: boolean; loaded: boolean; cancelled: boolean; failed: boolean; version: number; package: PackageInput; facilityId: string; price: number; events: FlightEvent[] };
+/** Live flight phases; see docs/DRONE_LINK.md. Only lib/drone-mission.ts changes them. */
+export type MissionPhase = 'TAKEOFF_OUT' | 'TO_PICKUP' | 'LAND_PICKUP' | 'AWAITING_LOAD' | 'READY_TO_LAUNCH' | 'TAKEOFF_LOADED' | 'TO_DROP' | 'LAND_DROP' | 'AWAITING_UNLOAD' | 'TAKEOFF_HOME' | 'RETURNING' | 'LAND_HOME' | 'COMPLETE' | 'ABORTED';
+export type LiveTelemetry = { ts: number; receivedAt: number; lat: number; lon: number; alt: number; battery: number; heading: number; speed: number; fix: number; sats: number; state: string; mode: string };
+export type LiveFlight = { droneId: string; droneName: string; transport: 'https' | 'sms'; phase: MissionPhase; home: Point; pickupPad: Point; dropPad: Point; cruiseAlt: number; cmdSeq: number | null; fault: string | null; startedAt: number; phaseAt: number; telemetry?: LiveTelemetry | null; stale?: boolean };
+/** Verified summary of a Claude return check attached at booking (lib/return-agent-shared.ts). */
+export type ReturnRecord = { review?: import('./return-agent-shared').ReturnReview; id: string; createdAt: number; anchor: number; elapsed: number; rate: number; paused: boolean; loaded: boolean; cancelled: boolean; failed: boolean; version: number; package: PackageInput; facilityId: string; price: number; events: FlightEvent[]; live?: LiveFlight };
+/** A needs_person return stays on the ground, simulated or live, until a person approves or declines it. */
+export const heldForPerson = (review?: import('./return-agent-shared').ReturnReview | null) => review?.verdict === 'needs_person' && !review.approvedAt && !review.declinedAt;
+export const HOLD_MESSAGE = 'A person must approve this return before the drone flies. Approve or decline it on the merchant desk.';
 export const STATE_TITLES: Record<FlightState, string> = { IDLE: 'Ready for your return', ASSIGNED: 'Your drone is assigned', PRE_FLIGHT: 'Getting ready for takeoff', EN_ROUTE_TO_PICKUP: 'Your drone is on the way', ARRIVED_AT_PICKUP: 'Your drone has arrived', AWAITING_PACKAGE: 'Ready when you are', PACKAGE_LOADED: 'Package securely loaded', EN_ROUTE_TO_DROPOFF: 'Your return is taking flight', ARRIVED_AT_DROPOFF: 'Your return has landed', HANDOFF_PENDING: 'Completing the handoff', COMPLETED: 'Your return has landed.', FAILED: 'Flight paused for assistance', CANCELLED: 'This return was cancelled' };
 export function routes(r: ReturnRecord) {
   const pickup = r.package.pickup, drop = FACILITIES.find(f => f.id === r.facilityId)!.point;
@@ -63,9 +71,28 @@ export function timing(r: ReturnRecord) {
   const pickup = 10 + pathDistance(inbound) / speed, depart = pickup + 8, dropoff = depart + pathDistance(outbound) / speed;
   return { speed, pickup, depart, dropoff, end: dropoff + 12 };
 }
+export const LIVE_STATE: Record<MissionPhase, FlightState> = { TAKEOFF_OUT: 'PRE_FLIGHT', TO_PICKUP: 'EN_ROUTE_TO_PICKUP', LAND_PICKUP: 'ARRIVED_AT_PICKUP', AWAITING_LOAD: 'AWAITING_PACKAGE', READY_TO_LAUNCH: 'PACKAGE_LOADED', TAKEOFF_LOADED: 'PACKAGE_LOADED', TO_DROP: 'EN_ROUTE_TO_DROPOFF', LAND_DROP: 'ARRIVED_AT_DROPOFF', AWAITING_UNLOAD: 'HANDOFF_PENDING', TAKEOFF_HOME: 'COMPLETED', RETURNING: 'COMPLETED', LAND_HOME: 'COMPLETED', COMPLETE: 'COMPLETED', ABORTED: 'CANCELLED' };
+export const OUTBOUND_PHASES: MissionPhase[] = ['READY_TO_LAUNCH', 'TAKEOFF_LOADED', 'TO_DROP', 'LAND_DROP', 'AWAITING_UNLOAD', 'TAKEOFF_HOME', 'RETURNING', 'LAND_HOME', 'COMPLETE'];
+/** Tracking values for a live flight, from the drone's last reported telemetry instead of the timeline. */
+function liveSnapshot(r: ReturnRecord, now: number) {
+  const l = r.live!, tel = l.telemetry, outbound = OUTBOUND_PHASES.includes(l.phase) || (l.phase === 'ABORTED' && r.loaded);
+  const path = { inbound: [l.home, l.pickupPad] as Point[], outbound: [l.pickupPad, l.dropPad] as Point[] };
+  // An ended flight (customer cancel or pilot abort) is terminal; a fault mid-flight is a pause.
+  const state: FlightState = r.cancelled || l.phase === 'ABORTED' ? 'CANCELLED' : l.fault ? 'FAILED' : LIVE_STATE[l.phase];
+  const done = state === 'COMPLETED' || state === 'HANDOFF_PENDING', ended = done || state === 'CANCELLED';
+  const start = outbound ? l.pickupPad : l.home, target = outbound ? l.dropPad : l.pickupPad;
+  const point: Point = tel ? [tel.lon, tel.lat] : done ? l.dropPad : start;
+  const leg = distance(start, target), remaining = done ? 0 : distance(point, target);
+  const inboundTotal = distance(l.home, l.pickupPad), total = inboundTotal + distance(l.pickupPad, l.dropPad) || 1;
+  const traveled = done ? total : (outbound ? inboundTotal : 0) + Math.max(0, leg - remaining);
+  const flying = !!tel && tel.alt > 1.5 && ['TAKEOFF', 'ENROUTE', 'HOLD', 'RTL'].includes(tel.state);
+  const speed = tel ? tel.speed : 0, pace = Math.max(speed, 6), eta = ended ? 0 : remaining / pace + 25;
+  return { state, elapsed: Math.max(0, now - l.startedAt) / 1000, point, heading: tel?.heading ?? bearing(start, target), completed: [start, point], altitude: tel ? Math.max(0, tel.alt) : 0, speed, battery: tel && tel.battery >= 0 ? tel.battery : 0, remaining, totalRemaining: Math.max(0, total - traveled), progress: Math.min(1, traveled / total), eta, totalEta: ended ? 0 : outbound ? eta : eta + distance(l.pickupPad, l.dropPad) / pace + 50, flying, outbound, path, timestamp: now };
+}
 export function snapshot(r: ReturnRecord, now: number) {
+  if (r.live) return liveSnapshot(r, now);
   const t = timing(r), path = routes(r);
-  const raw = r.elapsed + (r.paused || r.cancelled || r.failed ? 0 : Math.max(0, now - r.anchor) / 1000 * r.rate);
+  const raw = r.elapsed + (r.paused || r.cancelled || r.failed || heldForPerson(r.review) ? 0 : Math.max(0, now - r.anchor) / 1000 * r.rate);
   const e = Math.min(raw, r.loaded ? t.end : t.pickup + 3);
   const state: FlightState = r.cancelled ? 'CANCELLED' : r.failed ? 'FAILED' : e < 3 ? 'ASSIGNED' : e < 10 ? 'PRE_FLIGHT' : e < t.pickup ? 'EN_ROUTE_TO_PICKUP' : e < t.pickup + 3 ? 'ARRIVED_AT_PICKUP' : !r.loaded ? 'AWAITING_PACKAGE' : e < t.depart ? 'PACKAGE_LOADED' : e < t.dropoff ? 'EN_ROUTE_TO_DROPOFF' : e < t.dropoff + 3 ? 'ARRIVED_AT_DROPOFF' : e < t.end ? 'HANDOFF_PENDING' : 'COMPLETED';
   const outbound = r.loaded && e >= t.depart, flightPath = outbound ? path.outbound : path.inbound;
@@ -74,15 +101,17 @@ export function snapshot(r: ReturnRecord, now: number) {
   const legRemaining = Math.max(0, legDistance - flown), total = pathDistance(path.inbound) + pathDistance(path.outbound);
   const traveled = (outbound ? pathDistance(path.inbound) : 0) + flown;
   const altitude = flying ? Math.min(68, Math.max(0, legTime * 5), legRemaining / t.speed * 5) : 0;
-  const eta = state === 'COMPLETED' ? 0 : outbound ? Math.max(0, t.end - e) : Math.max(0, t.pickup - e);
+  // Once loaded, the ETA counts down to the handoff even while the drone is still on the ground at pickup.
+  const eta = state === 'COMPLETED' ? 0 : r.loaded ? Math.max(0, t.end - e) : Math.max(0, t.pickup - e);
   return { state, elapsed: e, ...motion, altitude, speed: flying && !r.paused ? t.speed : 0, battery: Math.max(0, 98 - traveled / 1000 * (4 + r.package.weight * .6) - e / 60 * .45), remaining: legRemaining, totalRemaining: Math.max(0, total - traveled), progress: traveled / total, eta, totalEta: Math.max(0, t.end - e), flying, outbound, path, timestamp: now };
 }
 export function settle(r: ReturnRecord, now: number): ReturnRecord {
+  if (r.live) return r; // live events are recorded by the mission as the drone reports progress
   const s = snapshot(r, now), t = timing(r);
   const schedule: [FlightState, number][] = [['ASSIGNED', 0], ['PRE_FLIGHT', 3], ['EN_ROUTE_TO_PICKUP', 10], ['ARRIVED_AT_PICKUP', t.pickup], ['AWAITING_PACKAGE', t.pickup + 3]];
   if (r.loaded) schedule.push(['PACKAGE_LOADED', t.pickup + 3], ['EN_ROUTE_TO_DROPOFF', t.depart], ['ARRIVED_AT_DROPOFF', t.dropoff], ['HANDOFF_PENDING', t.dropoff + 3], ['COMPLETED', t.end]);
   const events = [...r.events];
-  for (const [state, threshold] of schedule) if (s.elapsed >= threshold && !events.some(e => e.state === state)) events.push({ state, title: STATE_TITLES[state], at: Math.max(r.createdAt, Math.min(now, r.anchor + (threshold - r.elapsed) / r.rate * 1000)) });
+  for (const [state, threshold] of schedule) if (s.elapsed >= threshold && !events.some(e => e.state === state)) events.push({ state, title: STATE_TITLES[state], at: Math.max(r.createdAt, events[events.length - 1]?.at ?? 0, Math.min(now, r.anchor + (threshold - r.elapsed) / r.rate * 1000)) });
   if ((r.cancelled || r.failed) && !events.some(e => e.state === s.state)) events.push({ state: s.state, title: STATE_TITLES[s.state], at: now });
   return { ...r, events };
 }
@@ -91,8 +120,9 @@ export function createReturn(pkg: PackageInput, id: string, now: number): Return
   if (!f) throw new Error('No compatible demo facility. Adjust the package or service.');
   return { id, createdAt: now, anchor: now, elapsed: 0, rate: 1, paused: false, loaded: false, cancelled: false, failed: false, version: 0, package: pkg, facilityId: f.id, price: f.price, events: [{ state: 'ASSIGNED', title: STATE_TITLES.ASSIGNED, at: now }] };
 }
-export type Action = 'load' | 'pause' | 'resume' | 'advance' | 'reset' | 'cancel' | 'speed' | 'fail' | 'retry';
+export type Action = 'load' | 'pause' | 'resume' | 'advance' | 'reset' | 'cancel' | 'speed' | 'fail' | 'retry' | 'approve' | 'decline';
 export function control(record: ReturnRecord, action: Action, now: number, rate?: number): ReturnRecord {
+  if (record.live) throw new Error('Live flight controls belong to the drone operator in Fleet.');
   let r = settle(record, now); const s = snapshot(r, now), t = timing(r);
   if ((s.state === 'COMPLETED' || s.state === 'CANCELLED') && action !== 'reset') throw new Error('This return has ended. Start a new demo or reset it.');
   r = { ...r, elapsed: s.elapsed, anchor: now, version: r.version + 1 };
@@ -100,13 +130,22 @@ export function control(record: ReturnRecord, action: Action, now: number, rate?
   if (action === 'pause') r.paused = true;
   if (action === 'resume') r.paused = false;
   if (action === 'speed') { if (![1, 5, 10].includes(rate!)) throw new Error('Choose 1×, 5×, or 10×.'); r.rate = rate!; }
+  if (action === 'approve' || action === 'decline') {
+    if (!heldForPerson(r.review)) throw new Error('This return is not waiting for a person.');
+    r.review = { ...r.review!, ...(action === 'approve' ? { approvedAt: now } : { declinedAt: now }) };
+    if (action === 'decline') r.cancelled = true;
+  }
   if (action === 'advance') {
+    if (heldForPerson(r.review)) throw new Error(HOLD_MESSAGE);
+    if (r.failed) throw new Error('Wait until the flight resumes before skipping ahead.');
     if (!r.loaded && s.elapsed >= t.pickup + 3) throw new Error('Confirm package loading before continuing.');
     r.elapsed = !r.loaded ? t.pickup + 3 : s.elapsed < t.depart ? t.depart : s.elapsed < t.dropoff ? t.dropoff : t.end;
   }
   if (action === 'cancel') { if (r.loaded) throw new Error('A loaded return cannot be cancelled. Complete the demo or reset it.'); r.cancelled = true; }
   if (action === 'fail') r.failed = true;
   if (action === 'retry') { r.failed = false; r.paused = false; }
-  if (action === 'reset') r = { ...createReturn(r.package, r.id, now), version: r.version, rate: record.rate };
+  // A reset restarts the flight, not the return: its booking time and any verified Claude check stay attached.
+  // A declined return that is reset goes back to waiting for a person; an approval stands.
+  if (action === 'reset') r = { ...createReturn(r.package, r.id, now), createdAt: record.createdAt, version: r.version, rate: record.rate, ...(record.review ? { review: { ...record.review, declinedAt: undefined } } : {}) };
   return settle(r, now);
 }

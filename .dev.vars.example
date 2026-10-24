@@ -1,6 +1,12 @@
 # Copy to .dev.vars for local development; never commit real credentials.
+# Drone link (Fleet, /api/drone/*): any random string of 32+ characters, e.g. `openssl rand -base64 32`.
+DRONE_LINK_SECRET=
+# Optional SMS drone link through Twilio.
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_FROM_NUMBER=
 ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-5-5
+ANTHROPIC_MODEL=claude-opus-5-5
 APIFY_TOKEN=
 APIFY_ACTOR_ID=
 
@@ -10,7 +16,7 @@ GOOGLE_MAPS_MAP_ID=DEMO_MAP_ID
 # Login with Amazon profile linking (not order/return API access).
 AMAZON_CLIENT_ID=
 AMAZON_CLIENT_SECRET=
-AMAZON_REDIRECT_URI=https://aero-returns-kv15.kveldanda10.chatgpt.site/api/amazon/callback
+AMAZON_REDIRECT_URI=http://127.0.0.1:5173/api/amazon/callback
 
 # Supabase Auth (Google + custom:amazon providers configured in Supabase)
 SUPABASE_URL=

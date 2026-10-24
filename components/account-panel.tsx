@@ -49,6 +49,6 @@ export default function AccountPanel({onHistory}:{onHistory:()=>void}){
     {error&&<p className="error-note" role="alert">{error}</p>}
     {account?.error&&<p className="error-note" role="alert">{account.error}</p>}
     <p className="fine-print">Signing in does not import Amazon purchases, create retailer returns, or authorize refunds. Switching accounts keeps each return history separate.</p>
-    <p className="fine-print">This hosted prototype is private. App accounts do not bypass the Site’s sharing controls.</p>
+    <p className="fine-print">Anyone with the link can use this demo. Each browser and signed-in account keeps its own return history.</p>
   </div>;
 }
