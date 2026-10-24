@@ -2,6 +2,8 @@
 
 A map-first, end-to-end **simulated** drone returns app for the Cal Hacks 13.0 demo. The app lives separately from the parent arbitrage engine. It never sends physical flight commands, creates a carrier return, charges a payment method, or approves a retailer refund.
 
+Source: [kv1514/aero-returns](https://github.com/kv1514/aero-returns) (private). GitHub Actions runs typechecks, unit tests, Actor tests, and a build on changes.
+
 Continuing with Claude? Start with [`CLAUDE.md`](CLAUDE.md) and [`docs/HANDOFF.md`](docs/HANDOFF.md) for current status, setup, verification, and next steps.
 
 ## Run locally
@@ -74,6 +76,10 @@ Only the core DB binding is required; `.openai/hosting.json` declares it. Missin
 
 The simulator does not assume a permanent server loop. The server stores its clock anchor, elapsed virtual time, rate, payload, selected facility, and loading state. Any request can derive current telemetry and persist newly crossed milestones. A client interpolates that same deterministic record and polls every two seconds. Multiple tabs agree after reconnection. Polling is not a claim of Supabase/Convex realtime use.
 
+## Booking recovery
+
+Unfinished package details and the current booking step are recoverable in the same tab for 12 hours after the last edit. Closing a dialog or reloading for Maps setup does not lose them. A completed booking clears its draft; Start over resets it, and Amazon/assistant imports begin a fresh draft. Images and account tokens are never included. Review consent is always unchecked after recovery. Session-storage restrictions leave in-memory editing available.
+
 ## Verification
 
 ```sh
@@ -101,7 +107,7 @@ Open **Maps** below the tracking actions. Paste a website-restricted Google Maps
 
 Enable **Maps JavaScript API**, **Geocoding API**, and **Places API (New)**, with billing enabled. Restrict the key to those APIs and website referrers `https://aero-returns-kv15.kveldanda10.chatgpt.site/*` and optionally `http://127.0.0.1:5173/*`. Set quotas and billing alerts in Google Cloud. No Google key is bundled in source. Setup: [Google key guidance](https://developers.google.com/maps/api-security-best-practices).
 
-With a key, tracking uses Google Maps and advanced markers. Without a key, or after a loading/authorization failure, the existing MapLibre demo remains available. Booking supports one-time browser geolocation, accuracy feedback, Google address search, and selecting a pickup pin. Location permission is requested only after a button click. Coordinates are sent to Google only when Google features are used. A confirmed pickup is saved with a booking; there is no background location watch or tracking of other people. Bookings remain inside the Berkeley demo area, and no low-accuracy device fix is accepted without manual refinement.
+With a key, tracking uses Google Maps and advanced markers. Without a key, or after a loading/authorization failure, the existing MapLibre demo remains available. Booking supports one-time browser geolocation, accuracy feedback, Google address search, and selecting a pickup pin. Location permission is requested only after a button click. Coordinates are sent to Google only when Google features are used. A booking draft, including the pickup, is kept in this tab’s session storage for recovery; the confirmed pickup is saved on the server only with a booking; there is no background location watch or tracking of other people. Bookings remain inside the Berkeley demo area, and no low-accuracy device fix is accepted without manual refinement.
 
 **Nearby drop-offs** searches the current pickup, the user's opt-in device location, or an entered address/city. Categories are UPS drop-offs, other shipping drop-offs, and warehouses. Google's [Text Search (New)](https://developers.google.com/maps/documentation/javascript/place-search) returns up to 20 candidates, filtered to the selected 5/10/25 km radius and sorted by straight-line distance. A listing is not evidence of QR acceptance, public access, or drone participation. Warehouses are explicitly marked as potentially private. Places are displayed on Google Maps with hours/details and directions links; search locations and results are memory-only, never stored as participating hubs. No seeded listings are substituted for a failed API call.
 

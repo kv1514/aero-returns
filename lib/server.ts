@@ -4,7 +4,7 @@ import { control, createReturn, settle, snapshot, type ReturnRecord } from './si
 const packageSchema = z.object({
   retailer: z.enum(['Amazon', 'Nike', 'Zara', 'Other']), method: z.enum(['qr', 'label']),
   weight: z.number().finite().positive().max(20), dimensions: z.tuple([z.number().positive().max(150), z.number().positive().max(150), z.number().positive().max(150)]),
-  fragile: z.boolean(), address: z.string().min(3).max(160), pickup: z.tuple([z.number().min(-122.31).max(-122.24), z.number().min(37.85).max(37.90)]),
+  fragile: z.boolean(), address: z.string().trim().min(3).max(160), pickup: z.tuple([z.number().min(-122.31).max(-122.24), z.number().min(37.85).max(37.90)]),
   instructions: z.string().max(500), service: z.enum(['standard', 'priority']), returnReference: z.string().max(150).optional(),
 });
 const actionSchema = z.object({ action: z.enum(['load','pause','resume','advance','reset','cancel','speed','fail','retry']), rate: z.number().optional() });

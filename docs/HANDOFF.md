@@ -1,6 +1,6 @@
 # AERO handoff for Claude
 
-Prepared October 23–24, 2026.
+Prepared October 23, 2026 (Pacific).
 
 ## Start here
 
@@ -18,6 +18,12 @@ The goal is a polished, interactive 3–5 minute Cal Hacks returns demo, with us
 - Login with Amazon profile OAuth, PKCE/state, private profile persistence, disconnect, and an Amazon Orders → return QR/label → AERO booking flow. No automatic purchase import, actual return creation, or refunds.
 - `/demo` includes the presentation runbook and 58 researched Cal Hacks prize cards. Research is a dated snapshot; recheck official sponsor rules before submission.
 
+## Latest polish
+
+Same-tab booking recovery now preserves package details, pickup, return reference and wizard step through closing/reloading. Draft parsing rejects corrupt, expired and out-of-area data. Confirmation consent is not restored. Blank pickup labels are rejected client and server side. Return references appear in review and receipts. `/demo` now includes Google/Amazon readiness and direct GitHub/handoff links. GitHub Actions checks future pushes and pull requests.
+
+The latest browser QA attempt was blocked by the browser URL policy, so fresh mobile/visual verification and a demo recording remain outstanding. Code, HTTP checks, and build verification remain available; do not describe them as browser tests.
+
 ## Next work that needs credentials
 
 1. Configure Google Maps JavaScript API, Geocoding API, Places API (New), billing, referrer/API restrictions and quotas. Test actual map loading, search, permission denied, inaccurate location, zero results, and mobile layout. No real Google key was provided during implementation.
@@ -27,7 +33,7 @@ The goal is a polished, interactive 3–5 minute Cal Hacks returns demo, with us
 
 ## Verification at handoff
 
-Typecheck and production build pass. All 17 TypeScript tests pass. Local HTTP smoke checks pass for the complete booking journey, session isolation, Maps configuration, Amazon missing-setup state, cross-origin rejection, and invalid callback rejection. Browser interaction verified Amazon import opening a prefilled booking and nearby discovery leading to Maps configuration without a key. Real Google and Amazon calls are unverified until credentials are configured.
+Typecheck and production build pass. All 21 TypeScript tests pass. Local HTTP smoke checks pass for the complete booking journey, session isolation, Maps configuration, Amazon missing-setup state, cross-origin rejection, and invalid callback rejection. Browser interaction verified Amazon import opening a prefilled booking and nearby discovery leading to Maps configuration without a key. Real Google and Amazon calls are unverified until credentials are configured.
 
 ## Code map
 
