@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { DEMO_PACKAGE, type ReturnRecord, type FlightState } from '../lib/simulation';
+const base=process.env.AERO_TEST_URL||'http://127.0.0.1:5173';
+let cookie='';
+async function req(path:string,method='GET',data?:unknown,anonymous=false){const response=await fetch(base+path,{method,headers:{'Content-Type':'application/json','Origin':base,...(!anonymous&&cookie?{Cookie:cookie}:{})},body:data?JSON.stringify(data):undefined});if(!cookie&&response.headers.get('set-cookie'))cookie=response.headers.get('set-cookie')!.split(';')[0];return {status:response.status,data:await response.json() as {record:ReturnRecord;returns:ReturnRecord[];telemetry:{state:FlightState};anthropic:boolean;error?:string}};}
+await req('/api/returns');
+const created=await req('/api/returns','POST',DEMO_PACKAGE);assert.equal(created.status,201,JSON.stringify(created.data));
+const id=created.data.record.id,path=`/api/returns/${id}`;
+assert.equal((await req(path,'GET',undefined,true)).status,404,'another session cannot read a return');
+assert.equal((await req(path,'PATCH',{action:'load'})).status,400,'premature load is blocked');
+let response=await req(path,'PATCH',{action:'advance'});assert.equal(response.data.telemetry.state,'AWAITING_PACKAGE');
+assert.equal((await req(path,'PATCH',{action:'advance'})).status,400,'advance cannot bypass loading');
+response=await req(path,'PATCH',{action:'load'});assert.equal(response.data.telemetry.state,'PACKAGE_LOADED');
+assert.equal((await req(path,'PATCH',{action:'cancel'})).status,400,'loaded flight cannot be cancelled');
+await req(path,'PATCH',{action:'advance'});await req(path,'PATCH',{action:'advance'});response=await req(path,'PATCH',{action:'advance'});assert.equal(response.data.telemetry.state,'COMPLETED');
+const restored=await req(path);assert.equal(restored.data.telemetry.state,'COMPLETED');assert.ok(restored.data.record.events.some((e:{state:string})=>e.state==='COMPLETED'));
+const history=await req('/api/returns');assert.ok(history.data.returns.some((r:{id:string})=>r.id===id));
+assert.equal((await req('/api/returns','POST',{...DEMO_PACKAGE,weight:100})).status,400);
+const integrations=await req('/api/integrations');assert.equal(integrations.status,200);assert.equal(typeof integrations.data.anthropic,'boolean');
+console.log('PASS: booking → pickup wait → explicit load → delivery → persisted receipt; session isolation; payload validation; integration status.');

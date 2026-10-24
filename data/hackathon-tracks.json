@@ -1,0 +1,776 @@
+{
+  "event": "Cal Hacks 13.0",
+  "eventDates": "2026-10-23 to 2026-10-25",
+  "verifiedDate": "2026-10-23",
+  "timezone": "America/Los_Angeles",
+  "officialPrizePage": "https://hive.hackberkeley.org/prizes",
+  "officialResources": "https://hive.hackberkeley.org/resources",
+  "officialDevpost": "https://cal-hacks-13-0.devpost.com/",
+  "hivePrizeUpdatedAt": "2026-10-23 15:47 (UI display; timezone not explicitly labeled)",
+  "hiveResourcesUpdatedAt": "2026-10-23 16:30 (UI display; timezone not explicitly labeled)",
+  "cardCounts": {
+    "organizer": 11,
+    "sponsor": 31,
+    "mlh": 16,
+    "total": 58
+  },
+  "scope": "Complete visible Hive prize-card inventory, not 58 independent submission checkboxes; several cards group multiple placements/categories. Sponsor criteria may change.",
+  "eligibility": {
+    "deadline": "2026-10-25 09:00 PDT (Devpost header; body loosely says PST)",
+    "venueBy": "2026-10-25 08:00 Pacific",
+    "requirements": [
+      "Accepted and checked in as a hacker",
+      "Devpost says college students, ages 18+, teams 2–4",
+      "All work during hackathon",
+      "Image and GitHub repository required",
+      "Live or recorded demonstration",
+      "Three-minute pitch plus two-minute Q&A"
+    ],
+    "source": "https://cal-hacks-13-0.devpost.com/",
+    "uncertainties": [
+      "Solo award conflicts with displayed 2–4 team requirement",
+      "No verified general limit on sponsor-track entries or prize stacking",
+      "Current Devpost prize list is less complete than Hive",
+      "Devpost rules page is code of conduct, not full competition eligibility rules"
+    ]
+  },
+  "recommendedNow": [
+    "Visa",
+    "Microsoft Built for the Real World / Customer Impact",
+    "Anthropic",
+    "Apify Best Use / Best Actor",
+    "MLH Gen AI",
+    "General organizer awards; Hardware only with working physical integration",
+    "Commit Fellowship if team wants continued startup work"
+  ],
+  "recommendedConditional": [
+    "Figma with real public artifacts and stage log",
+    "Nessie after actual sandbox purchase/refund integration",
+    "Convex OR Spacetime as an actual central realtime backend",
+    "Fetch only with end-to-end ASI:One workflow",
+    "Cartesia OR ElevenLabs if voice is a real user flow"
+  ],
+  "discrepancies": [
+    {
+      "subject": "Convex",
+      "hive": "$5,000 cash",
+      "devpost": "EP-133 K.O. II and ESP32-S3 touch board",
+      "resolution": "Unresolved; check sponsor/organizers before promising prize."
+    },
+    {
+      "subject": "Fetch.ai",
+      "sponsor": "$1,250/$750/$500 plus two $250 special prizes",
+      "hiveAndDevpost": "$1,500/$1,000/$500",
+      "resolution": "Unresolved."
+    },
+    {
+      "subject": "Figma",
+      "linkedSponsorBrief": "Four categories: $500/$500/$2,000/$2,000",
+      "devpost": "Five $1,000 categories",
+      "resolution": "Use linked brief to prepare deliverables; confirm award categories."
+    },
+    {
+      "subject": "CREAO",
+      "hive": "2,500/1,500/1,000 descriptions plus Launchpad",
+      "devpost": "$3,000 cash description each, displayed $8,760 in cash",
+      "resolution": "Do not treat displayed package values as cash; brief inaccessible."
+    },
+    {
+      "subject": "SpaceXAI/SpaceXSI",
+      "hive": "Cursor plus Grok Imagine/Voice API; Grok Bot bonus; separate MLH raffle",
+      "devpost": "Different label and incomplete requirements",
+      "resolution": "Keep sponsor challenge and workflow raffle distinct."
+    },
+    {
+      "subject": "Current event",
+      "oldSite": "live.calhacks.io/prizes is Cal Hacks 12.0",
+      "currentSite": "https://hive.hackberkeley.org/prizes",
+      "resolution": "Do not apply 2025 criteria or prizes to 2026."
+    }
+  ],
+  "unlistedSponsorResources": [
+    {
+      "name": "Canva",
+      "source": "https://docs.google.com/document/d/1K7Yr2nThpxLt6mALIyIKlaW_fmTacVCFudH-TFM47rA/edit",
+      "note": "Official starter pack listed; no separate prize card in retrieved inventory."
+    },
+    {
+      "name": "Context.dev",
+      "source": "https://docs.google.com/document/d/1CM6dcuojhrRtcokWgspJ8ELeS864UVAneW83eQLliw4/edit",
+      "note": "Official starter pack listed; no separate prize card in retrieved inventory."
+    },
+    {
+      "name": "Greptile",
+      "source": "https://www.greptile.com/docs/introduction",
+      "note": "Official starter pack listed; no separate prize card in retrieved inventory."
+    }
+  ],
+  "tracks": [
+    {
+      "group": "organizer",
+      "name": "First Overall",
+      "prize": "MacBook Air 13-inch M5 (Hive); MacBook Air or Framework per member (Devpost)",
+      "requirement": "Working, creative, useful project with thoughtful UX and technical depth.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "AERO needs a reliable end-to-end demo and a clear target customer; prize wording differs.",
+      "additionalSources": [
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "organizer",
+      "name": "Second Overall",
+      "prize": "Nintendo Switch 2 per member",
+      "requirement": "General organizer judging.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Same AERO submission as overall.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Third Overall",
+      "prize": "Google Intelligent Eyewear per member",
+      "requirement": "General organizer judging.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Same AERO submission as overall.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Most Creative Hack",
+      "prize": "Instax camera plus film",
+      "requirement": "Original problem framing or combination of technologies.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "QR-to-compatible-return-route with animated drone journey is a strong visual story.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Most Technically Complex Hack",
+      "prize": "NuPhy Air60 HE",
+      "requirement": "Demonstrate engineering depth and sound architecture.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Evidence: telemetry state machine, compatibility decisions, audit events, failure recovery; animated markers alone are insufficient.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Best People-First Hack",
+      "prize": "Apple Watch SE 3",
+      "requirement": "People-first social impact; detailed eligibility not published on Hive.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Pitch a specific community with evidence, such as car-free campus residents or people with mobility constraints; show accessibility and usable fallbacks.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Best Planet-First Hack",
+      "prize": "America the Beautiful Parks Pass",
+      "requirement": "Planet-first social impact; detailed rubric not published on Hive.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Compare against an explicit travel baseline; label CO2 estimates and assumptions. Drone delivery is not automatically lower-emission.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Best Hardware Hack",
+      "prize": "Bambu Lab A1 Mini",
+      "requirement": "Demonstrable hardware project; detailed criteria not published on Hive.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Strong only if the real indoor drone integration works; current map simulation alone does not demonstrate hardware.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Best Beginner Hack",
+      "prize": "AirPods 4",
+      "requirement": "Beginner eligibility must be confirmed with organizers.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Do not infer eligibility from a first drone project; current 13.0 page does not define beginner.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Best Solo Hack",
+      "prize": "AirPods Pro 3",
+      "requirement": "Solo-project eligibility.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "The proposal specifies four teammates. Devpost also says teams of 2–4 despite listing this award; organizer clarification needed for solo applicants.",
+      "additionalSources": []
+    },
+    {
+      "group": "organizer",
+      "name": "Hacker's Choice",
+      "prize": "Logitech MX Master 4",
+      "requirement": "Participant-voted category; voting mechanics not published on retrieved page.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Polished, interactive return journey helps; do not invent voting rules.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Notability — Best Use of Notability",
+      "prize": "1 year Pro plus merch",
+      "requirement": "Genuine evolving build notes, clear detail, meaningful features and relevance.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Keep real contemporaneous sketches, diagrams, audio and iteration notes; a retrospective token notebook is weak.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Meta/Facebook — Bringing People Closer Together with AI",
+      "prize": "Round 2 at Meta Menlo Park, travel/accommodation subject to rules, swag",
+      "requirement": "Meaningful human connection, essential AI, originality and working demo.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "A logistics app is weak as-is; a neighborhood return-sharing/assistance network would be a larger product change.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Capital One — Best Use of Nessie",
+      "prize": "$300 Giftogram per winning member",
+      "requirement": "Use Nessie; judged on completeness, creativity and complexity.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Real sandbox purchase/refund audit flow fits broader plan. Current app has no Nessie integration. Clearly distinguish sandbox money from a real refund.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Factory — Best Use of Droid SDK",
+      "prize": "$2,000 cash plus Factory credits and swag",
+      "requirement": "TypeScript/Python Droid SDK must do meaningful work in the running product; README explains it.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Using Factory to code does not qualify. Possible future exception-resolution agent with triggers, scoped tools and visible decisions.",
+      "additionalSources": [
+        "https://docs.google.com/document/d/1fvdIhF-v-a9Q35eiNHcQj6avg0nMUjKk0TPMUync0Rk/edit"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Fetch.ai — Best Use of Fetch.ai",
+      "prize": "Sponsor: $1,250/$750/$500 plus two $250 specials; organizer: $1,500/$1,000/$500",
+      "requirement": "Agentverse registration, ACP, ASI:One discovery and complete primary workflow inside ASI:One; real tools/orchestration; public repo.",
+      "fit": "stretch",
+      "source": "https://www.fetch.ai/events/hackathons/calhacks-13-0/hackpack",
+      "notes": "Not satisfied by simulated drones named agents. Requires Devpost plus ASI:One submission agent, agent metadata/tags and 3–5 minute video. Payment protocol and interactive cards are bonuses.",
+      "additionalSources": [
+        "https://hive.hackberkeley.org/prizes",
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Armadin — Best Security Hack",
+      "prize": "Apple headphones; possible hacking tools, unconfirmed",
+      "requirement": "Criteria marked Coming soon.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "QR payload validation and audit logging alone do not establish security-track eligibility; wait for actual challenge.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Coinbase — Best Use of x402",
+      "prize": "$500 USDC plus recruiter call per member per track; up to $4,000 stated for two tracks",
+      "requirement": "Meaningful x402 use; two-track brief linked but PDF contents not yet verified.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Future paid relay/service requests could fit. Do not claim a mocked payment or ordinary payment API qualifies.",
+      "additionalSources": [
+        "https://drive.google.com/file/d/12TnPLguduV3gh1zY_TJ176XmVDz2RGW9/view"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "CREAO — Best AI-First Disruptor",
+      "prize": "Hive: 2,500 plus Launchpad benefits; Devpost description: $3,000 cash plus benefits",
+      "requirement": "Sponsor brief needed to verify exact CREAO integration requirements.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "AI-assisted returns and merchant operations could fit, but using Claude alone is not evidence of CREAO participation.",
+      "additionalSources": [
+        "https://community.creao.ai/CalHacks2026",
+        "https://docs.google.com/document/d/1N1imAn1aBrA1JPoz5X_sjyOsQggUfPvJW2UIIFmdHf4/edit",
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "CREAO — Best One-Person Company",
+      "prize": "Hive: 1,500 plus Launchpad benefits; Devpost description: $3,000 cash plus benefits",
+      "requirement": "Sponsor brief needed; title refers to business automation, solo-team rule not verified.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Possible merchant operations automation; do not assume four-person team is excluded solely by category name.",
+      "additionalSources": [
+        "https://community.creao.ai/CalHacks2026",
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "CREAO — Best Team Empowerment",
+      "prize": "Hive: $1,000 total cash wording plus Launchpad; Devpost: $3,000 cash plus benefits",
+      "requirement": "Sponsor brief needed to verify exact requirement.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "A merchant review/exception queue could fit after real CREAO use; prize publications conflict.",
+      "additionalSources": [
+        "https://community.creao.ai/CalHacks2026",
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "CRS — Financial Intelligence Challenge",
+      "prize": "$1,000 Overall; $500 Financial AI Agent; interviews for Identity/Fraud and Unexpected Use",
+      "requirement": "Meaningful live CRS sandbox API/MCP usage, central to product; provided test identities only.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Return eligibility should not use customer credit. Fraud workflow would expand scope materially; avoid collecting real sensitive identities.",
+      "additionalSources": [
+        "https://calhacks.crscreditapi.com/"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Hyphenate — Autonomous Systems for Finance",
+      "prize": "$8,000/$5,000/$3,000; expedited interviews top five",
+      "requirement": "Realistic messy finance problem, believable autonomous work roles, limited access, audit trail, escalation, working live demo and evidence of what is simulated.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Merchant refund reconciliation plus discrepancies and approval could fit a focused finance product; simple returns booking is insufficient. Video should begin with decisive failure/recovery moment.",
+      "additionalSources": [
+        "https://docs.google.com/document/d/1u4iN8R97ILY3kfHTPKC82zdutHrGx4ze5eCAP-J92w4/edit"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Cartesia — Best Use of Cartesia",
+      "prize": "Meta glasses, still TBD",
+      "requirement": "Voice must be core; working demo, two-minute demo-first pitch, setup/features/limits README and source access.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Hands-free accessible booking and tracking could work. Browser speech synthesis or a decorative read-aloud button is not Cartesia integration.",
+      "additionalSources": [
+        "https://docs.google.com/document/d/1lBbGq4zbjx4tcgYP2WmcHu6w_E_N39BC/edit",
+        "https://docs.cartesia.ai"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Bitdeer AI — Best Use of Model Studio",
+      "prize": "1st: $500 credits plus four gaming mice; 2nd: $200 credits plus one LEGO Technic set",
+      "requirement": "Working Model Studio application; explain and demonstrate usage.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Another model service adds scope without improving the current Claude-focused return flow. Credits are not cash.",
+      "additionalSources": [
+        "https://drive.google.com/file/d/1s6HW6Auouwv2XbRsPMmyge6vJRKaXJPZ/view"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Figma — Idea to Demo",
+      "prize": "Brief: Design $500; Creative $500; Workflow $2,000; Stage Log $2,000; recruiter session",
+      "requirement": "Public Figma files, Edu verification, <=3min demo, required Figma Slides, stage log <=200 words/stage, prototype embeds and repo.",
+      "fit": "strong",
+      "source": "https://docs.google.com/document/d/1HjzThDGveSLiilIdEPEHq12ZVLZ5eS0T8CQC5_m_-rg/edit",
+      "notes": "Use real iterative workflow; log ideation/prototyping/handoff/code generation, product, purpose, minutes, 1–5 rating, output. Five $1k Devpost categories conflict with four-category sponsor brief.",
+      "additionalSources": [
+        "https://hive.hackberkeley.org/prizes",
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Moss — Best Use of Moss",
+      "prize": "AirPods Max/Pros; exact item unclear",
+      "requirement": "Examples: live voice agent, persistent personal agent, or social-post engagement.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Could add return assistant memory, but exact requirements are sparse and current app uses no Moss.",
+      "additionalSources": [
+        "https://docs.moss.dev/docs"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "SpaceXAI — Make it Legendary",
+      "prize": "Custom Cursor mechanical keyboard",
+      "requirement": "Hive: build with Cursor and use Grok Imagine or Voice API; space-data theme; Grok Bot bonus.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Devpost calls it SpaceXSI and omits Grok API requirement; no current tool usage and drones are not inherently space-data projects. Separate from MLH workflow raffle.",
+      "additionalSources": [
+        "https://cal-hacks-13-0.devpost.com/",
+        "https://drive.google.com/file/d/15YRK6uPOlHDAnc78oJOoUBQZ9cTHqCiL/view"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Convex — Best Use of Convex",
+      "prize": "Hive: $5,000 cash; Devpost: EP-133 K.O. II plus ESP32-S3 board",
+      "requirement": "Meaningful reactive backend usage.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Excellent technical fit for shared job state and telemetry; current D1 persistence is not Convex. Choose one real primary realtime backend instead of stacking databases.",
+      "additionalSources": [
+        "https://docs.convex.dev/home",
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Microsoft — Built for the Real World",
+      "prize": "Surface laptop per member, FDE tech talk and mentorship",
+      "requirement": "Production-minded AI agent, customer understanding, measurable usefulness, production path, responsible design and end-to-end functionality.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "No mandatory Azure/Microsoft API stated in retrieved rubric. Show real AI review, manual escalation, audit and honest simulation boundary.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Microsoft — Customer Impact Award",
+      "prize": "FDE tech talk and senior-FDE mentorship",
+      "requirement": "Same rubric as Built for the Real World.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Collect a narrow user story and measure steps/time removed; avoid invented customer metrics.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Apify — Best Use of Apify",
+      "prize": "$2,000/$1,000/$800/$400/$400",
+      "requirement": "Meaningful working Apify use and overall project quality.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Live product URL enrichment with source URL, actual dimensions/weight, failure handling and user confirmation fits. Keyless fixture mode does not prove live integration.",
+      "additionalSources": [
+        "https://drive.google.com/drive/folders/1RqT3r6i1MqSBAJoAIwXc3lEMmQCnshVt"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Apify — Best Actor",
+      "prize": "$400",
+      "requirement": "Build an Actor for this event; meaningful Apify usage.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Ship and demonstrate the custom product-spec Actor; an adapter alone or unrelated existing Actor does not demonstrate building an Actor.",
+      "additionalSources": [
+        "https://drive.google.com/drive/folders/1RqT3r6i1MqSBAJoAIwXc3lEMmQCnshVt"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Elastic — Best Use of Agent Builder on Serverless",
+      "prize": "1st Meta Quest 3S; 2nd Bose QuietComfort",
+      "requirement": "Devpost names Agent Builder on Serverless; Hive detailed criteria Coming soon.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Search retailer policies/facility compatibility through real Elastic tools. Do not copy 12.0 MCP rules as confirmed 13.0 requirements.",
+      "additionalSources": [
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Visa — Reimagining Shopping",
+      "prize": "$5,000",
+      "requirement": "Rubric: innovation25, UX25, AI execution20, commerce impact15, trust/responsibility15.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Returns improve post-purchase merchant/customer experience. No Visa payment integration requirement stated in the retrieved rubric.",
+      "additionalSources": [
+        "https://docs.google.com/document/d/1Lgtd0f8mHZy_nWabtz751AkSW5Oj-z1XMhzAwddtfOA/edit"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "AfterQuery",
+      "prize": "Coming soon",
+      "requirement": "Coming soon.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Track and award are listed, but criteria are not available; do not invent an integration requirement.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Annapurna Labs",
+      "prize": "Coming soon",
+      "requirement": "Coming soon.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Sponsor existence is confirmed; no specific eligible build or prize verified.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Anthropic",
+      "prize": "Coming soon",
+      "requirement": "Named narrow community; a lived or interviewed problem; a working useful flow; meaningful Claude role with understood failures.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Photo review should be advisory, flag uncertainty and require human override for uncertain package or policy details; actual Claude call needed.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Atlassian — Best Agent / Best Security Solution for Agents",
+      "prize": "AirPods Max",
+      "requirement": "Forge app for Atlassian workflows or agent governance; choose one of two tracks; <=3min demo plus repo.",
+      "fit": "poor",
+      "source": "https://docs.google.com/document/d/12Y2Vamxbm9W_l2Eo4AM530R7HfNAYCXI-UI6F6Xnggw/edit",
+      "notes": "Real Jira/Confluence exception-workflow or agent-action audit product would qualify in principle; merely planning AERO in Jira does not.",
+      "additionalSources": []
+    },
+    {
+      "group": "sponsor",
+      "name": "Bright Data — Best Agent/App Using Public Web Data",
+      "prize": "1st $1,500 credits+$500 Amazon; 2nd $1,000+$350; 3rd $500+$250",
+      "requirement": "Live public web data must be essential, real and robust; no mock/hardcoded demos, login/paywall scraping or private personal data.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Alternative to Apify for live package specs/policies. Do not add a duplicate thin adapter solely for a second badge.",
+      "additionalSources": [
+        "https://github.com/ScrapeAlchemist/public-data-hackpack"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Mana.space",
+      "prize": "Coming soon",
+      "requirement": "Meaningful development use; 1–2 public Mana pages/chats, explain tool contribution and show one build moment; live app bonus.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Can support a future genuine prototype/debugging stage; do not claim past work was built in Mana.",
+      "additionalSources": [
+        "https://mana.space/a/calhacks"
+      ]
+    },
+    {
+      "group": "sponsor",
+      "name": "Spacetime",
+      "prize": "Coming soon",
+      "requirement": "SpacetimeDB should be the core real-time backend with meaningful shared state and sync.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Strong fit for synchronized 15-drone simulation or operations dashboard; alternative to Convex, not a token parallel database.",
+      "additionalSources": [
+        "https://spacetimedb.com/blog/spacetime-at-calhacks"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Build Your Hackathon A-Team with SpaceXSI",
+      "prize": "Custom mechanical keyboard",
+      "requirement": "Cursor as core coding agent plus Grok Bot workflow automation, describe both and opt into raffle.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Different from sponsor SpaceXAI API/space-data challenge; current Codex development does not establish eligibility.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of ElevenLabs",
+      "prize": "Wireless earbuds",
+      "requirement": "Integrate ElevenLabs audio in the working project.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Accessible narrated booking/tracking could fit; browser speech does not.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Gemini API",
+      "prize": "MLH swag kits",
+      "requirement": "Meaningful Gemini API application.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Do not duplicate Claude image review without a user benefit; current no Gemini call.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Solana",
+      "prize": "Unruggable hardware wallets",
+      "requirement": "Working meaningful Solana usage.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Future verified relay receipts/payments possible, but unnecessary blockchain adds risk and scope to demo.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Tiger Data",
+      "prize": "Stream Deck Mini",
+      "requirement": "Use Tiger Data for real data/analytics.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Telemetry history and flight aggregates fit, but would add another datastore; defer unless central.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Presage",
+      "prize": "Fitbit Inspire plus Presage credits/discount perks",
+      "requirement": "Use Presage SDK human-sensing capabilities.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Human physiology/emotion sensing is not necessary for returns; do not add camera health inference.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Gen AI",
+      "prize": "Assorted prizes",
+      "requirement": "Use publicly available generative-AI APIs in a novel working app.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Actual Claude return-photo review naturally overlaps; demo fixtures alone are not a live API integration.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Backboard",
+      "prize": "Tile Essentials Pack",
+      "requirement": "Use Backboard for persistent AI context/memory and a seamless experience.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Could remember return preferences across sessions; not current database-only persistence.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Vultr",
+      "prize": "M5Stack Tab5",
+      "requirement": "Build/deploy meaningfully on Vultr.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Current hosting does not qualify; do not move hosting solely for a peripheral prize.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Commit Fellowship Prize Category",
+      "prize": "Interview plus The Lean Startup",
+      "requirement": "Working team prototype, real problem, opt in and complete supplemental form.",
+      "fit": "strong",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Good low-build-effort path for AERO founders; an interview is not automatic admission.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes",
+        "https://cal-hacks-13-0.devpost.com/"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of DigitalOcean",
+      "prize": "Retro wireless mouse",
+      "requirement": "Use DigitalOcean infrastructure or Gradient AI.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Current deployment is elsewhere; hosting migration not necessary for AERO core.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Snowflake API",
+      "prize": "Arduino Student Kit",
+      "requirement": "Working Snowflake API usage.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Possible fleet analytics later, but redundant infrastructure now.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of Auth0",
+      "prize": "Wireless headphones",
+      "requirement": "Use Auth0 APIs for authentication/agent security.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Meaningful merchant/operator identity is relevant if implemented and demonstrated; current demo lacks Auth0.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Use of MongoDB Atlas",
+      "prize": "M5Stack IoT Kit",
+      "requirement": "Build using MongoDB Atlas.",
+      "fit": "poor",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Would duplicate current backend; not automatically satisfied by generic persistence.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best .Tech Domain Name",
+      "prize": "Desktop microphone plus .tech domain up to 10 years",
+      "requirement": "Use an eligible .tech domain; verify exact registration rules with MLH.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Branding route only if team has an eligible domain; not permission to buy one.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    },
+    {
+      "group": "mlh",
+      "name": "Best Domain Name from GoDaddy Registry",
+      "prize": "Digital gift card",
+      "requirement": "Register/use eligible GoDaddy Registry domain per MLH rules.",
+      "fit": "stretch",
+      "source": "https://hive.hackberkeley.org/prizes",
+      "notes": "Exact eligible suffix and registration process should be checked before purchasing.",
+      "additionalSources": [
+        "https://www.mlh.com/events/prizes"
+      ]
+    }
+  ]
+}

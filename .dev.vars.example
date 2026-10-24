@@ -1,0 +1,5 @@
+# Copy to .dev.vars for local development; never commit real credentials.
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-5-5
+APIFY_TOKEN=
+APIFY_ACTOR_ID=

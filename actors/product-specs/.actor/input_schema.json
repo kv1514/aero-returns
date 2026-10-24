@@ -1,0 +1,1 @@
+{"title":"AERO product specification lookup","type":"object","schemaVersion":1,"properties":{"url":{"title":"Public product URL","type":"string","description":"HTTPS product page on a supported retailer. No login, private data, or paywalls.","editor":"textfield"}},"required":["url"]}
