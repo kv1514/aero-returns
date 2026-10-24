@@ -55,3 +55,13 @@ The original checkout is `/Users/kv15/Documents/ChatGPT/arbitradge/sites/aero`; 
 - Supabase-backed Google/Amazon sign-in is not live until provider credentials/configuration are supplied and verified. The user declined using the connected SideSpace organization; another organization has not yet been identified.
 - Current validation: typecheck, production build, all 29 TypeScript tests, and both HTTP smoke scripts pass. Account HTTP checks cover missing configuration, unknown providers, cross-origin rejection, and a forged callback redirecting only to the fixed app root.
 - Hosted browser verification: photorealistic 3D loads; target selection and orbit work; Street View opens a panorama at the selected demo hub; Google Earth resolves the selected coordinates. Account buttons correctly remain disabled with setup explanations. Live Supabase OAuth is still unverified. Screenshot evidence is local in ignored `outputs/aero-earth.jpg`.
+
+## Visual pickup guide
+
+The tracking card and Earth explorer now open a dedicated Pickup photo view. Users can upload/drop JPG, PNG, or WebP files (8 MB cap), mark the package with a frame, adjust its position/size using keyboard/range controls, add notes, and explicitly confirm a reference. An original illustrated example supports an offline demo. The reference overlay animation is labeled a preview, not a camera match. Loading confirmation is still required separately.
+
+Photos are resized/re-encoded locally to remove source metadata and kept only in React memory, scoped to the active return. Closing the dialog preserves them; refresh, sign-out, or changing returns clears them. Neither photos nor location notes are added to D1 or browser storage. Street View opens at the pickup coordinates in Google Maps; user photos are never published to Google imagery.
+
+`POST /api/pickup-review` optionally sends one photo plus notes to the existing Anthropic integration after the user chooses “Send photo to Claude.” It proposes a validated image-coordinate box, never geographic coordinates or flight instructions. Multiple/no parcels force manual selection; all results need human confirmation. Only an API usage event is stored. Missing provider setup leaves manual marking available; live AI detection remains unverified until a configured provider call succeeds.
+
+Files: `components/pickup-guide.tsx`, `lib/pickup-guide.ts`, `app/api/pickup-review/route.ts`, `public/sample-pickup.svg`. The three new unit tests cover ambiguous detections, untrusted bounds/text, and boundary-safe manual framing (32 tests total).

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+<defs><linearGradient id="wall" x2="0" y2="1"><stop stop-color="#dfded4"/><stop offset="1" stop-color="#bdbfaf"/></linearGradient><linearGradient id="floor" x2="0" y2="1"><stop stop-color="#c7c6bc"/><stop offset="1" stop-color="#e7e2d7"/></linearGradient><filter id="shadow"><feGaussianBlur stdDeviation="11"/></filter></defs>
+<path fill="url(#wall)" d="M0 0h1200v800H0z"/><path d="M0 130h1200M0 260h1200M0 390h1200M0 520h1200" stroke="#f1f0e6" stroke-width="4"/>
+<path fill="#f4f0e6" d="M365 55h420v550H365z"/><path fill="#38564d" d="M390 75h370v520H390z"/>
+<path d="M420 110h310v185H420zm0 225h310v210H420z" fill="none" stroke="#587066" stroke-width="8"/><rect x="681" y="305" width="18" height="40" rx="9" fill="#d5c69e"/>
+<path d="M0 605h1200v195H0z" fill="url(#floor)"/><path d="M0 650h1200M400 605 300 800M850 605l100 195" stroke="#acada5" stroke-width="3"/>
+<path d="m375 607 380 0 35 70H340z" fill="#877d64"/><path d="m390 615 350 0 22 48H369z" fill="none" stroke="#ada28a" stroke-width="3"/>
+<ellipse cx="878" cy="678" rx="139" ry="27" opacity=".18" filter="url(#shadow)"/>
+<path d="m775 530 146-20 87 55-145 27z" fill="#d8b37d"/><path d="m775 530 88 62v112l-88-64z" fill="#ae8151"/><path d="m863 592 145-27v113l-145 26z" fill="#c99c66"/><path d="m837 521 86 59 0 112 25-5V575l-87-58z" fill="#ead6b6"/><rect x="949" y="600" width="35" height="23" fill="#f7f3e8" transform="rotate(-10 949 600)"/>
+<ellipse cx="183" cy="636" rx="90" ry="18" opacity=".17"/><path d="M110 490h140l-20 144h-100z" fill="#b87856"/><path d="M104 485h152v24H104z" fill="#d08d66"/><g fill="#496c53"><ellipse cx="180" cy="403" rx="30" ry="100"/><ellipse cx="145" cy="439" rx="27" ry="77" transform="rotate(-36 145 439)"/><ellipse cx="214" cy="437" rx="25" ry="80" transform="rotate(35 214 437)"/></g>
+<rect x="32" y="30" width="249" height="42" rx="21" fill="#fff" opacity=".9"/><text x="53" y="57" font-family="Arial,sans-serif" font-size="18" fill="#415447">ILLUSTRATED DEMO SCENE</text>
+</svg>

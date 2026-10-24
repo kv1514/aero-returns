@@ -134,3 +134,9 @@ Google Maps rendering, address lookup, UPS and warehouse search have been verifi
 **Earth & Street View** opens a photorealistic Google 3D explorer with pickup, current drone position, and simulated hub camera targets, plus an optional orbit. Google Earth and Street View open at the selected coordinates in separate tabs. Each nearby listing also has these links. Street View uses Google's key-free Maps URLs, so no paid panorama API is enabled. Imagery is recorded and is not live drone footage. Unsupported devices or quota limits show an external-view fallback.
 
 **Your account** includes Supabase-backed Google and Amazon sign-in. Provider buttons remain disabled until configured; no successful live social login is claimed. See [`docs/ACCOUNTS.md`](docs/ACCOUNTS.md) for exact callbacks, the Amazon userinfo adapter, ownership/security behavior, and pending setup. The private Site sharing gate remains separate.
+
+## Visual pickup reference
+
+Choose **Show us your pickup spot** from tracking, or **Pickup photo** in the Earth explorer. Upload a fresh photo, mark your package, add placement notes, and confirm the reference. The photo stays in page memory until refresh, sign-out, or a return switch. An illustrated example and reference-overlay preview work without AI credentials. Street View remains separate from the uploaded image.
+
+Optional **Send photo to Claude** calls `/api/pickup-review` using the existing server-only Anthropic configuration. It sends the resized photo and notes only after that click, returns an approximate package frame for human review, and stores only usage evidence. See [Anthropic vision documentation](https://platform.claude.com/docs/en/build-with-claude/vision). This is preparation for a future camera integration; no drone recognizes, collects, or flies toward a parcel from this reference. Explicit loading confirmation remains mandatory.

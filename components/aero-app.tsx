@@ -1,12 +1,13 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Earth, UserRound as LogInIcon, ArrowRight, ArrowUpRight, Bell, Battery, Check, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Copy, Download, Home, Leaf, MapPin, Package, Pause, Play, Radio, RotateCcw, ShieldCheck, SlidersHorizontal, Sparkles, Navigation, Truck, Building2, Wind, X, Plus, Flag, Signal, ArrowUp, Timer, Box, TriangleAlert } from 'lucide-react';
+import { Camera, Earth, UserRound as LogInIcon, ArrowRight, ArrowUpRight, Bell, Battery, Check, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Copy, Download, Home, Leaf, MapPin, Package, Pause, Play, Radio, RotateCcw, ShieldCheck, SlidersHorizontal, Sparkles, Navigation, Truck, Building2, Wind, X, Plus, Flag, Signal, ArrowUp, Timer, Box, TriangleAlert } from 'lucide-react';
 import FlightMap from './flight-map';
 import MapSettings,{useMapConfig} from './map-config';
 import NearbyPlaces from './nearby-places';
 import AmazonConnection from './amazon-connection';
 import AccountPanel from './account-panel';
 import EarthExplorer from './earth-explorer';
+import type {PickupGuide} from '@/lib/pickup-guide';
 import {authOutcome} from '@/lib/account-policy';
 import Modal from './modal';
 import Booking from './booking';
@@ -24,6 +25,7 @@ async function api<T={record:ReturnRecord;now:number}>(path:string, options?:Req
 export default function AeroApp({initialId}: {initialId?:string}) {
   const {prefs,setPrefs}=useAccessibility();
   const mapConfig=useMapConfig();
+  const [pickupGuide,setPickupGuide]=useState<PickupGuide|null>(null);
   const [bookingDraft,setBookingDraft]=useState<BookingDraft|null>(null);
   useEffect(()=>{try{const saved=readDraft(sessionStorage.getItem(DRAFT_KEY));setBookingDraft(saved);if(!saved)sessionStorage.removeItem(DRAFT_KEY);}catch{}},[]);
   const saveDraft=useCallback((draft:BookingDraft)=>{setBookingDraft(draft);try{sessionStorage.setItem(DRAFT_KEY,JSON.stringify(draft));}catch{}},[]);
@@ -35,7 +37,7 @@ export default function AeroApp({initialId}: {initialId?:string}) {
   recordRef.current=record;
   const notify=useCallback((message:string)=>{setToast(message);clearTimeout(toastTimer.current);toastTimer.current=setTimeout(()=>setToast(''),5000);},[]);
   const accept=useCallback((data:{record:ReturnRecord;now:number})=>{
-    const old=recordRef.current;const next=old&&old.id===data.record.id&&old.version>data.record.version?old:data.record;recordRef.current=next;setRecord(next);setOffset(data.now-Date.now());setLastSync(data.now);setOffline(false);setError('');
+    const old=recordRef.current;if(old?.id!==data.record.id)setPickupGuide(null);const next=old&&old.id===data.record.id&&old.version>data.record.version?old:data.record;recordRef.current=next;setRecord(next);setOffset(data.now-Date.now());setLastSync(data.now);setOffline(false);setError('');
   },[]);
   async function loadHistory(){const data=await api<{returns:ReturnRecord[]}>('/api/returns');setHistory(data.returns);return data.returns as ReturnRecord[];}
   async function book(pkg:PackageInput,clear=true){setBusy(true);try{const data=await api('/api/returns',{method:'POST',body:JSON.stringify(pkg)});accept(data);if(clear)clearDraft();setDialog(null);window.history.replaceState({},'',`/track/${data.record.id}`);channel.current?.postMessage({id:data.record.id});notify('AERO–104 is assigned. Your return starts here.');}catch(e){setError((e as Error).message);throw e;}finally{setBusy(false);}}
@@ -87,7 +89,7 @@ export default function AeroApp({initialId}: {initialId?:string}) {
           <div className="route-details"><div className="route-stop"><span className="stop-icon"><Home size={15}/></span><div><small>PICKUP LOCATION</small><strong>{r.package.address.split(',')[0]}</strong><p>Berkeley, CA</p></div></div><div className="route-connector"/><div className="route-stop"><span className="stop-icon destination"><Building2 size={15}/></span><div><small>RETURN DESTINATION <span className="auto-tag"><Sparkles size={10}/>Auto-matched</span></small><strong>{facility.name}</strong><p>{facility.address}</p></div><button className="icon-button small" aria-label="Why this return facility was selected" onClick={()=>setDialog('facility')}><ChevronRight size={16}/></button></div></div>
           <button className="package-summary" onClick={()=>setDialog('package')}><span className="package-symbol"><Package size={22}/></span><span><strong>{r.package.retailer} return</strong><small>Small parcel · {r.package.weight} kg</small></span><span className="return-reference">{r.package.method==='qr'?<QrIcon/>:<Box size={16}/>}</span><ChevronRight size={16}/></button>
           <div className="tracking-actions">{waiting?<button className="primary" disabled={busy||offline} onClick={()=>setDialog('load')}><Package size={17}/>Confirm package is loaded<ArrowRight size={17}/></button>:complete?<button className="primary" onClick={()=>setDialog('receipt')}><CheckCircle2 size={17}/>View return receipt<ArrowRight size={17}/></button>:cancelled?<button className="primary" onClick={()=>setDialog('booking')}>Schedule another return<ArrowRight size={17}/></button>:r.failed?<button className="primary" onClick={()=>void action('retry')}>Resume demo flight<ArrowRight size={17}/></button>:<button className="secondary full" onClick={()=>setDialog(r.loaded?'activity':'instructions')}>{r.loaded?<Radio size={17}/>:<InfoIcon/>}{r.loaded?'View flight updates':'View pickup instructions'}<ArrowRight size={16}/></button>}</div>
-          <button className="assistant-entry" onClick={()=>setDialog('assistant')}><Sparkles size={13}/><span>Give your return a smarter start</span><ChevronRight size={14}/></button><div className="return-tools"><button onClick={()=>setDialog('nearby')}><Building2 size={14}/>Nearby drop-offs</button><button onClick={()=>setDialog('amazon')}><Package size={14}/>Amazon</button><button onClick={()=>setDialog('maps')}><MapPin size={14}/>Maps</button></div><div className="panel-footer"><ShieldCheck size={14}/><span>Every step, taken care of.</span><button onClick={()=>setDialog('help')}>Get help <ArrowUpRight size={12}/></button></div>
+          <button className="pickup-entry" onClick={()=>setDialog('pickup')}><span><Camera size={19}/></span><div><strong>{pickupGuide?.confirmed?'Pickup reference ready':'Show us your pickup spot'}</strong><small>{pickupGuide?.confirmed?'View your marked package photo':'Add a photo. Mark your package.'}</small></div><ChevronRight size={16}/></button><button className="assistant-entry" onClick={()=>setDialog('assistant')}><Sparkles size={13}/><span>Give your return a smarter start</span><ChevronRight size={14}/></button><div className="return-tools"><button onClick={()=>setDialog('nearby')}><Building2 size={14}/>Nearby drop-offs</button><button onClick={()=>setDialog('amazon')}><Package size={14}/>Amazon</button><button onClick={()=>setDialog('maps')}><MapPin size={14}/>Maps</button></div><div className="panel-footer"><ShieldCheck size={14}/><span>Every step, taken care of.</span><button onClick={()=>setDialog('help')}>Get help <ArrowUpRight size={12}/></button></div>
         </div>
       </aside>
       <div className="time-back-card"><span className="leaf-icon"><Leaf size={21}/></span><span><strong>Less running around. More living.</strong><small>About 25 minutes back in your day.<span> Demo estimate</span></small></span><ArrowUpRight size={17}/></div>
@@ -98,8 +100,8 @@ export default function AeroApp({initialId}: {initialId?:string}) {
       {error&&<div className="connection-error" role="alert"><TriangleAlert size={17}/><span>{error}</span><button onClick={()=>record?void refresh():location.reload()}>Retry</button></div>}
     </section>
     {toast&&<div className="toast" role="status"><span><Check size={15}/></span>{toast}<button aria-label="Dismiss notification" onClick={()=>setToast('')}><X size={15}/></button></div>}
-    {dialog&&<Modal title={{earth:'Explore from above and below',maps:'Maps & location',nearby:'Find a place nearby',amazon:'Your Amazon connection',assistant:'Your return assistant',accessibility:'Designed around you',booking:'A new kind of return',history:'Your returns',about:'Returns, without the trip.',activity:'Your return journey',package:'Package details',facility:'A smarter way back',instructions:'Ready for a smooth pickup',load:'Ready for takeoff?',receipt:'Your return receipt',help:'A little help, when you need it',session:'Your AERO account',reset:'Start the demo again?',cancel:'Cancel this return?'}[dialog]||'AERO'} onClose={()=>setDialog(null)} wide={dialog==='earth'||dialog==='booking'||dialog==='history'||dialog==='nearby'}>
-      {dialog==='earth'&&<EarthExplorer config={mapConfig} record={r} clockOffset={offset} stale={offline} frozenAt={lastSync}/>}
+    {dialog&&<Modal title={{pickup:'Your visual pickup guide',earth:'Explore your pickup',maps:'Maps & location',nearby:'Find a place nearby',amazon:'Your Amazon connection',assistant:'Your return assistant',accessibility:'Designed around you',booking:'A new kind of return',history:'Your returns',about:'Returns, without the trip.',activity:'Your return journey',package:'Package details',facility:'A smarter way back',instructions:'Ready for a smooth pickup',load:'Ready for takeoff?',receipt:'Your return receipt',help:'A little help, when you need it',session:'Your AERO account',reset:'Start the demo again?',cancel:'Cancel this return?'}[dialog]||'AERO'} onClose={()=>setDialog(null)} wide={dialog==='pickup'||dialog==='earth'||dialog==='booking'||dialog==='history'||dialog==='nearby'}>
+      {(dialog==='earth'||dialog==='pickup')&&<EarthExplorer key={r.id} config={mapConfig} record={r} clockOffset={offset} stale={offline} frozenAt={lastSync} initialTab={dialog==='pickup'?'pickup':'earth'} guide={pickupGuide?.recordId===r.id?pickupGuide:null} onGuideChange={setPickupGuide}/>}
       {dialog==='maps'&&<MapSettings config={mapConfig}/>}
       {dialog==='nearby'&&<NearbyPlaces config={mapConfig} pickup={r.package.pickup} onConfigure={()=>setDialog('maps')}/>}
       {dialog==='amazon'&&<AmazonConnection onImport={importReturn}/>}

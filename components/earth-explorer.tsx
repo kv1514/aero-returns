@@ -1,14 +1,21 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {Earth,ExternalLink,MapPin,RotateCw,Square} from 'lucide-react';
+import {Earth,ExternalLink,MapPin,RotateCw,Square,Camera} from 'lucide-react';
 import {loadGoogle,type GoogleConfig} from '@/lib/google-maps';
 import {earthURL,streetViewURL} from '@/lib/map-links';
 import {latLng} from '@/lib/location';
 import {FACILITIES,snapshot,type ReturnRecord,type Point} from '@/lib/simulation';
+import PickupPhoto from './pickup-guide';
+import type {PickupGuide} from '@/lib/pickup-guide';
+type ExplorerProps={config:GoogleConfig;record:ReturnRecord;clockOffset:number;stale:boolean;frozenAt:number};
+export default function EarthExplorer(props:ExplorerProps&{initialTab?:'earth'|'pickup';guide:PickupGuide|null;onGuideChange:(guide:PickupGuide|null)=>void}){
+  const [tab,setTab]=useState(props.initialTab||'earth');
+  return <><div className="explorer-tabs" role="group" aria-label="Pickup explorer views"><button aria-pressed={tab==='earth'} onClick={()=>setTab('earth')}><Earth size={17}/>3D neighborhood</button><button aria-pressed={tab==='pickup'} onClick={()=>setTab('pickup')}><Camera size={17}/>Pickup photo{props.guide?.confirmed&&<span className="explorer-saved">Ready</span>}</button></div>{tab==='earth'?<EarthScene {...props}/>:<PickupPhoto record={props.record} guide={props.guide} onChange={props.onGuideChange}/>}</>;
+}
 type Camera={center:{lat:number;lng:number;altitude:number};range:number;tilt:number;heading:number};
 type EarthMap=HTMLElement&{center:Camera['center'];flyCameraTo(options:{endCamera:Camera;durationMillis:number}):void;flyCameraAround(options:{camera:Camera;durationMillis:number;repeatCount:number}):void;stopCameraAnimation():void;};
 type Library3D={Map3DElement:new(options:Record<string,unknown>)=>EarthMap};
-export default function EarthExplorer({config,record,clockOffset,stale,frozenAt}:{config:GoogleConfig;record:ReturnRecord;clockOffset:number;stale:boolean;frozenAt:number}){
+function EarthScene({config,record,clockOffset,stale,frozenAt}:ExplorerProps){
   const [target,setTarget]=useState<'pickup'|'drone'|'hub'>('pickup'),[status,setStatus]=useState('Loading 3D imagery…'),[ready,setReady]=useState(false),[orbit,setOrbit]=useState(false);
   const element=useRef<HTMLDivElement>(null),map=useRef<EarthMap|null>(null),current=useRef({record,clockOffset,stale,frozenAt});current.current={record,clockOffset,stale,frozenAt};
   const pointFor=(which:typeof target):Point=>{const c=current.current;return which==='pickup'?c.record.package.pickup:which==='hub'?FACILITIES.find(f=>f.id===c.record.facilityId)!.point:snapshot(c.record,c.stale?c.frozenAt:Date.now()+c.clockOffset).point;};
