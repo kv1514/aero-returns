@@ -2,15 +2,10 @@ import { env } from 'cloudflare:workers';
 import { z } from 'zod';
 import { session } from './session';
 import { attachLive, liveReturnRequest } from './drone-server';
-import { control, createReturn, settle, snapshot, type ReturnRecord } from './simulation';
+import { assignDrone, bookedReview, control, createReturn, settle, snapshot, type ReturnRecord } from './simulation';
+import { packageSchema, validationMessage } from './request-flow';
 import type { ReturnReview } from './return-agent-shared';
-export { session };
-export const packageSchema = z.object({
-  retailer: z.enum(['Amazon', 'Nike', 'Zara', 'Other']), method: z.enum(['qr', 'label']),
-  weight: z.number().finite().positive().max(20), dimensions: z.tuple([z.number().positive().max(150), z.number().positive().max(150), z.number().positive().max(150)]),
-  fragile: z.boolean(), address: z.string().trim().min(3).max(160), pickup: z.tuple([z.number().min(-122.31).max(-122.24), z.number().min(37.85).max(37.90)]),
-  instructions: z.string().max(500), service: z.enum(['standard', 'priority']), returnReference: z.string().max(150).optional(),
-});
+export { session, packageSchema };
 const actionSchema = z.object({ action: z.enum(['load','pause','resume','advance','reset','cancel','speed','fail','retry','approve','decline']), rate: z.number().optional() });
 export async function handle(request: Request, id?: string): Promise<Response> {
   let identity:Awaited<ReturnType<typeof session>>;
@@ -34,11 +29,14 @@ export async function handle(request: Request, id?: string): Promise<Response> {
       const { agentEventId, ...pkg } = packageSchema.extend({ agentEventId: z.string().uuid().optional() }).parse(JSON.parse(raw));
       const count = await db.prepare('SELECT COUNT(*) AS n FROM returns WHERE owner = ? AND created_at > ?').bind(owner, now - 3600000).first<{n: number}>();
       if ((count?.n || 0) >= 40) return reply({ error: 'You have created 40 demos this hour. Please reuse a return or try again later.' }, 429);
-      const r = createReturn(pkg, crypto.randomUUID(), now);
+      // The server picks the drone, never the browser: the nearest one not already flying this owner's other active simulated returns.
+      const recent = await db.prepare('SELECT record FROM returns WHERE owner = ? ORDER BY created_at DESC LIMIT 20').bind(owner).all<{ record: string }>();
+      const others = recent.results.flatMap(row => { try { return [JSON.parse(row.record) as ReturnRecord]; } catch { return []; } });
+      const r = createReturn(pkg, crypto.randomUUID(), now, assignDrone(pkg.pickup, others, now));
       // A Claude return check is attached only from this owner's own completed agent event, never from browser input.
       if (agentEventId) {
         const event = await db.prepare("SELECT result, created_at FROM integration_events WHERE id = ? AND owner = ? AND kind = 'agent' AND status = 'complete'").bind(agentEventId, owner).first<{ result: string; created_at: number }>();
-        if (event) { const s = JSON.parse(event.result) as Omit<ReturnReview, 'eventId' | 'at'>; r.review = { verdict: s.verdict, condition: s.condition, disposition: s.disposition, confidence: s.confidence, explanation: s.explanation, model: s.model, eventId: agentEventId, at: event.created_at }; }
+        if (event) { const s = JSON.parse(event.result) as Omit<ReturnReview, 'eventId' | 'at'>; r.review = bookedReview({ verdict: s.verdict, condition: s.condition, disposition: s.disposition, confidence: s.confidence, explanation: s.explanation, model: s.model, eventId: agentEventId, at: event.created_at }); }
       }
       await db.prepare('INSERT INTO returns (id, owner, created_at, version, record) VALUES (?, ?, ?, ?, ?)').bind(r.id, owner, now, 0, JSON.stringify(r)).run();
       return reply({ record: r, now }, 201);
@@ -65,7 +63,7 @@ export async function handle(request: Request, id?: string): Promise<Response> {
     }
     return reply({ record: r, telemetry: snapshot(r, now), now });
   } catch (error) {
-    if (error instanceof z.ZodError) return reply({ error: error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(' · ') }, 400);
+    if (error instanceof z.ZodError) return reply({ error: validationMessage(error) }, 400);
     if (error instanceof SyntaxError) return reply({ error: 'Invalid request.' }, 400);
     const message = error instanceof Error ? error.message : 'Unable to update this return.';
     if (/No compatible|Wait until|Confirm package|Choose |has ended|cannot be cancelled|Live flight|A person must|waiting for a person/.test(message)) return reply({ error: message }, 400);

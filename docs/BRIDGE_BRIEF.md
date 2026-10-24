@@ -50,7 +50,7 @@ Paste this whole file into the Claude session that is setting up the drone compu
 
 ## Coming in tonight's deploy (no bridge changes needed)
 
-- **Pin zone.** Each drone gets an optional pin zone, 0–100 m around its pickup pad (off by default). When a customer's pin is inside it, the drone flies to the pin instead of the pad.
+- **Pin zone.** Each drone gets an optional pin zone, 0–100 m around its pickup pad (off by default). When a customer's pin is inside it and at least 15 m inside the geofence, the drone flies to the pin instead of the pad. The bridge's `--fence-center`, `--fence-radius` and `--max-alt` must equal Fleet's, or the bridge rejects the pin GOTO with `FENCE` (the operator can then send it to the pad).
 - **Hover gate.** The drone then hovers over the pin; the server sends nothing until the operator taps **"Landing area clear · land"** (or switches to the pickup pad).
   - The bridge already handles this: after GOTO is DONE it holds position.
   - The website was tested locally with this exact bridge and its fake vehicle.

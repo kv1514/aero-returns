@@ -1,4 +1,5 @@
 import {accountClient} from '@/lib/supabase-server';
+import {unsupported} from '@/lib/http';
 export const dynamic='force-dynamic';
 export async function GET(request:Request){
   const url=new URL(request.url);
@@ -10,3 +11,5 @@ export async function GET(request:Request){
     const verified=await client.auth.getUser();return finish(verified.error||!verified.data.user?'failed':'success');
   }catch{return finish('failed');}
 }
+const no=unsupported('GET');
+export const POST=no,PUT=no,DELETE=no,PATCH=no,OPTIONS=no;

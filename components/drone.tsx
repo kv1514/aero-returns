@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import type { ReturnRecord } from '@/lib/simulation';
 export function DroneIllustration({ className = '', compact = false }: { className?: string; compact?: boolean }) {
   const id = useId().replace(/:/g, '');
   return <svg className={className} viewBox="0 0 380 220" fill="none" role="img" aria-label="AERO quadcopter with a secure return package">
@@ -40,3 +41,15 @@ export function DroneIllustration({ className = '', compact = false }: { classNa
   </svg>;
 }
 export const droneMarkerSvg = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="d" x1="0" x2="1" y2="1"><stop stop-color="white"/><stop offset="1" stop-color="#839ab7"/></linearGradient></defs><g stroke="#17273e" stroke-width="6" stroke-linecap="round"><path d="M35 35 22 22M65 35 78 22M35 65 22 78M65 65 78 78"/></g><g fill="#17273e" stroke="#c4d1e2" stroke-width="2"><circle cx="22" cy="22" r="15"/><circle cx="78" cy="22" r="15"/><circle cx="22" cy="78" r="15"/><circle cx="78" cy="78" r="15"/></g><g stroke="white" stroke-opacity=".5" stroke-width="3"><path d="m12 17 20 10m36-10 20 10M12 73l20 10m36-10 20 10"/></g><path d="m36 26 14-5 14 5 4 39-18 13-18-13Z" fill="url(#d)" stroke="#6b82a0"/><path d="m40 31 10-4 10 4-2 16H42Z" fill="#162a43"/><path d="M43 64h14" stroke="#347aff" stroke-width="4" stroke-linecap="round"/></svg>`;
+/** The OS reduced-motion setting or AERO's own Reduce motion toggle (body[data-motion]); camera moves then jump instead of flying. */
+export const prefersReducedMotion = () => typeof document !== 'undefined' && (document.body?.dataset.motion === 'true' || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches));
+/** Accessible names for map markers, set before MapLibre adds them so it keeps them instead of announcing an unnamed "Map marker" button. */
+export const fleetMarkerName = (name: string, nearest: boolean) => `Simulated drone ${name}${nearest ? ', nearest to your pickup' : ''}`;
+export const flightDroneName = (r: Pick<ReturnRecord, 'live' | 'drone'>) => `${r.live ? 'Live drone' : 'Simulated drone'} ${r.live?.droneName || r.drone?.name || 'AERO–104'}`;
+/** The pickup marker: a live flight lands at the customer's pin or the operator's pad; a simulation keeps "Your pickup". */
+export const pickupLabel = (record: Pick<ReturnRecord, 'live'> | null) => !record?.live ? 'Your pickup' : record.live.pickupSource === 'pin' ? 'Your pin' : 'Pickup pad';
+/** The keyless map's words for a return: like the Google map, a live flight is never called a simulation. */
+export function routeWords(record: Pick<ReturnRecord, 'live'> | null) {
+  const live = !!record?.live, kind = live ? 'live' : 'simulated';
+  return { map: record ? `Interactive Berkeley map showing the ${kind} drone route` : 'Interactive Berkeley map showing your pickup and the simulated drones nearby', schematic: `Offline schematic of the ${kind} drone route`, pickup: pickupLabel(record), hub: live ? 'Drop pad' : 'Return hub', offline: !record ? 'Offline map view' : live ? 'Offline route view · last reported position' : 'Offline route view · simulation continues' };
+}

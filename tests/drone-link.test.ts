@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { deriveDroneKey, formatCommand, formatTelemetry, lineDroneId, parseCommandBody, parseDroneBody, signLine, verifyLine } from '../lib/drone-protocol';
-import { ackOutcome, customerAction, dispatchBlockers, enterPhase, configProblem, operatorAction, phaseCommand, startLive, type Drone } from '../lib/drone-mission';
-import { createReturn, DEMO_PACKAGE, snapshot, control, type LiveTelemetry, type MissionPhase, type Point } from '../lib/simulation';
+import { ackOutcome, customerAction, dispatchBlockers, enterPhase, configProblem, groundChange, LIMITS, operatorAction, phaseCommand, settledFinal, startLive, type Drone } from '../lib/drone-mission';
+import { merchantRow } from '../lib/merchant';
+import { createReturn, DEMO_PACKAGE, snapshot, control, type LiveTelemetry, type MissionPhase, type Point, type ReturnRecord } from '../lib/simulation';
 
 const vectors = JSON.parse(readFileSync(new URL('./fixtures/drone-link-vectors.json', import.meta.url), 'utf8'));
 const t0 = 1761312345000, home: Point = [-122.2595, 37.8719], pickup: Point = [-122.2590, 37.8722], drop: Point = [-122.2585, 37.8716];
@@ -100,7 +101,9 @@ test('faults pause the mission until the operator retries, and abort always flie
   assert.equal(ackOutcome(r.live!, { cmdSeq: 4, status: 'DONE' }), null, 'a paused mission does not advance on stale acks');
   assert.deepEqual(operatorAction(r, 'retry'), { phase: 'TO_PICKUP', command: { type: 'GOTO', args: [pickup[1], pickup[0], 25] } });
   const atPhase = (phase: MissionPhase) => ({ ...r, live: { ...r.live!, fault: null, phase } });
-  assert.deepEqual(customerAction(atPhase('TO_PICKUP'), 'cancel'), { phase: 'ABORTED', cancelled: true, command: { type: 'RTL', args: [] } }, 'en route: fly home');
+  const enRoute = { ...ground, lat: 37.872, lon: -122.2592, alt: 24, state: 'ENROUTE', speed: 8 };
+  assert.deepEqual(customerAction({ ...atPhase('TO_PICKUP'), live: { ...atPhase('TO_PICKUP').live, telemetry: enRoute } }, 'cancel'), { phase: 'ABORTED', cancelled: true, command: { type: 'ABORT', args: [] } }, 'en route: ABORT, which the bridge flies as RTL in the air');
+  assert.deepEqual(customerAction({ ...atPhase('TO_PICKUP'), live: { ...atPhase('TO_PICKUP').live, telemetry: { ...enRoute, alt: 0, state: 'LANDED' } } }, 'cancel').command, { type: 'ABORT', args: [] }, 'on the ground en route (an RC landing): ABORT never takes off, unlike an RTL, which would climb');
   assert.deepEqual(customerAction(atPhase('TAKEOFF_OUT'), 'cancel'), { phase: 'ABORTED', cancelled: true, command: { type: 'LAND', args: [] } }, 'during takeoff: land, which supersedes the queued TAKEOFF');
   assert.deepEqual(customerAction(atPhase('LAND_PICKUP'), 'cancel'), { phase: 'ABORTED', cancelled: true, command: { type: 'LAND', args: [] } });
   assert.deepEqual(customerAction(atPhase('AWAITING_LOAD'), 'cancel'), { phase: 'ABORTED', cancelled: true }, 'no automatic takeoff after landing at pickup');
@@ -116,4 +119,59 @@ test('live tracking uses reported telemetry instead of the timeline', () => {
   assert.deepEqual(s.point, [tel.lon, tel.lat]); assert.equal(s.altitude, 24.6); assert.equal(s.flying, true); assert.equal(s.heading, 45);
   assert.equal(s.state, 'EN_ROUTE_TO_PICKUP'); assert.ok(s.remaining > 0 && s.remaining < 50); assert.ok(s.progress > 0 && s.progress < 1);
   assert.deepEqual(s.path.inbound, [home, pickup]);
+});
+
+/** A live return walked to `phase` through the mission rules, with the drone's events. */
+function flownTo(last: MissionPhase) {
+  const order: MissionPhase[] = ['TAKEOFF_OUT', 'TO_PICKUP', 'LAND_PICKUP', 'AWAITING_LOAD', 'READY_TO_LAUNCH', 'TAKEOFF_LOADED', 'TO_DROP', 'LAND_DROP', 'AWAITING_UNLOAD', 'TAKEOFF_HOME', 'RETURNING', 'LAND_HOME', 'COMPLETE'];
+  let r: ReturnRecord = startLive(createReturn({ ...DEMO_PACKAGE }, 'ret-5', t0), drone(), t0), seq = 0;
+  for (const phase of order.slice(0, order.indexOf(last) + 1)) r = enterPhase(r, phase, t0 + ++seq * 1000, phaseCommand(r.live!, phase) ? seq : null);
+  return { r, seq };
+}
+test('after the unload, the empty drone’s flight home never changes the delivered return', () => {
+  let { r, seq } = flownTo('TAKEOFF_HOME'); const at = t0 + 60_000;
+  assert.equal(r.live!.unloadedAt, t0 + 10_000, 'the handoff time is recorded when the drone leaves the drop pad');
+  const delivered = r.events.map(e => `${e.state}:${e.title}`);
+  assert.equal(snapshot(r, at).state, 'COMPLETED'); assert.equal(merchantRow(r, at).stage, 'Received');
+  // Operator HOLD on the way home, retry, then LAND (the server moves any live mission to ABORTED on LAND, RTL or ABORT).
+  r = enterPhase(r, 'TAKEOFF_HOME', at, ++seq, 'OPERATOR_HOLD'); assert.equal(snapshot(r, at).state, 'COMPLETED');
+  r = enterPhase(r, 'TAKEOFF_HOME', at + 1000, ++seq); assert.equal(snapshot(r, at).state, 'COMPLETED');
+  r = enterPhase(r, 'RETURNING', at + 2000, ++seq, 'LOW_BATT'); assert.equal(snapshot(r, at).state, 'COMPLETED');
+  r = enterPhase(r, 'ABORTED', at + 3000, null);
+  assert.equal(snapshot(r, at + 3000).state, 'COMPLETED', 'still delivered, not cancelled');
+  assert.deepEqual(r.events.map(e => `${e.state}:${e.title}`), delivered, 'no FAILED, CANCELLED or second COMPLETED event');
+  assert.deepEqual([merchantRow(r, at + 3000).stage, merchantRow(r, at + 3000).status], ['Received', 'Unload confirmed at the drop pad']);
+  assert.equal(r.live!.phase, 'ABORTED', 'the operator still sees the drone’s own state in Fleet');
+  // Before the unload, a fault still pauses and an abort still ends the customer's return.
+  const before = flownTo('TO_DROP').r;
+  assert.equal(snapshot(enterPhase(before, 'TO_DROP', at, 9, 'OPERATOR_HOLD'), at).state, 'FAILED');
+  assert.equal(snapshot(enterPhase(before, 'ABORTED', at, null), at).state, 'CANCELLED');
+});
+test('a finished live flight shows the drone’s last report, never 0% and 0 m', () => {
+  const { r } = flownTo('COMPLETE'), final: LiveTelemetry = { ...ground, battery: 81, alt: 0.2, lat: home[1], lon: home[0] };
+  assert.equal(snapshot(r, t0).battery, 0, 'records from before finalTelemetry still have none');
+  const s = snapshot({ ...r, live: { ...r.live!, finalTelemetry: final } }, t0);
+  assert.deepEqual([s.battery, s.altitude, s.point, s.flying, s.speed], [81, 0.2, home, false, 0]);
+  const outbound = flownTo('TO_PICKUP').r, aborted = snapshot({ ...outbound, live: { ...outbound.live!, phase: 'ABORTED', finalTelemetry: { ...ground, battery: 77, alt: 24, state: 'ENROUTE', speed: 8, lat: 37.872, lon: -122.2592 } } }, t0);
+  assert.deepEqual([aborted.state, aborted.battery, aborted.altitude, aborted.point, aborted.flying], ['CANCELLED', 77, 24, [-122.2592, 37.872], false], 'where the drone was when the flight ended, at rest');
+});
+test('a flight that ended in the air takes the drone’s first ground report as its final one', () => {
+  const air: LiveTelemetry = { ...ground, ts: t0 + 1000, battery: 88, alt: 10, state: 'HOLD', lat: 37.872, lon: -122.2592 }, landed: LiveTelemetry = { ...ground, ts: t0 + 60_000, battery: 84 };
+  const { r } = flownTo('TAKEOFF_HOME'), ended = enterPhase({ ...r, live: { ...r.live!, finalTelemetry: air } }, 'ABORTED', t0 + 2000, null);
+  const settled = settledFinal(ended, landed)!;
+  assert.deepEqual(settled.live!.finalTelemetry, landed);
+  const s = snapshot(settled, t0 + 61_000);
+  assert.deepEqual([s.state, s.altitude, s.point, s.battery], ['COMPLETED', 0, home, 84], 'delivered, at rest where it landed');
+  assert.deepEqual(settled.events, ended.events, 'no customer event');
+  assert.equal(settledFinal(ended, { ...air, ts: t0 + 3000 }), null, 'still flying: keep the last report until it lands');
+  assert.equal(settledFinal(ended, { ...landed, state: 'ERROR' }), null);
+  assert.equal(settledFinal(ended, { ...landed, ts: t0 }), null, 'an older report never replaces a newer one');
+  assert.equal(settledFinal(settled, { ...landed, ts: t0 + 90_000 }), null, 'only the first landing after the end');
+  assert.equal(settledFinal({ ...ended, live: { ...ended.live!, phase: 'RETURNING' } }, landed), null, 'a flight still in progress has no final report');
+});
+test('a ground report that changes what dispatch checks is stored at once', () => {
+  assert.equal(groundChange(ground, { ...ground, ts: t0 + 1000, battery: 91 }), false, 'a 1% battery wobble waits for the next ground write');
+  assert.equal(groundChange(ground, { ...ground, lat: ground.lat + 0.00001 }), false, 'about 1 m of GPS drift');
+  for (const change of [{ fix: 0 }, { sats: LIMITS.minSats - 1 }, { battery: LIMITS.minBattery - 1 }, { state: 'ERROR' }, { lat: ground.lat + 0.00003 }]) assert.equal(groundChange(ground, { ...ground, ...change }), true, JSON.stringify(change));
+  assert.equal(groundChange(null, ground), true);
 });

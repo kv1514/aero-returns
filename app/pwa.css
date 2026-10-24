@@ -1,0 +1,32 @@
+/* Home-screen app layer, loaded after ride.css. viewport-fit=cover lets AERO draw edge to edge on phones; these rules keep controls clear of the notch, status bar and home indicator.
+   env() is 0 on desktops (and on most edges of a portrait browser tab), so nothing moves there. Insets are added as margins, padding or a transparent border, so they stack on ride.css/merchant.css offsets without repeating them. */
+:root{--safe-top:env(safe-area-inset-top,0px);--safe-right:env(safe-area-inset-right,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--safe-left:env(safe-area-inset-left,0px)}
+a,button,label,summary,select,input,textarea,[role=button],[role=tab]{-webkit-tap-highlight-color:transparent}
+
+/* Map page: floating controls sit below the status bar and beside the notch */
+.ux-top,.ux-map-chips,.ux .ux-error{margin:var(--safe-top) var(--safe-right) 0 var(--safe-left)}
+.ux .map-controls{margin:var(--safe-top) var(--safe-right) 0 0}
+.toast{margin-top:var(--safe-top)}
+.modal:modal{top:var(--safe-top);bottom:var(--safe-bottom)}
+@media(min-width:761px){
+  .ux-sheet{margin:var(--safe-top) 0 var(--safe-bottom) var(--safe-left)}
+  .ux-float.demo,.ux .simulator-panel.ux-panel{margin-left:var(--safe-left)}
+  .ux-float,.ux .map-view-controls,.ux .simulator-panel.ux-panel,.ux .map-attribution{margin-bottom:var(--safe-bottom)}
+  .ux-float.earth,.ux .map-attribution{margin-right:var(--safe-right)}
+}
+@media(max-width:760px){
+  /* The trip sheet still reaches the bottom edge; its handle and content stop above the home indicator. */
+  .ux-sheet{padding:0 var(--safe-right) var(--safe-bottom) var(--safe-left)}
+  .modal,.modal.wide{max-height:calc(100dvh - 30px - var(--safe-top) - var(--safe-bottom))}
+}
+
+/* Merchant, Fleet and Judge Room: sticky headers grow under the status bar (a transparent border shows their background), content clears the notch and home indicator. The Judge Room nav has a fixed height, so its page is padded instead. */
+.merchant .merchant-top,.fleet .fleet-top{border-top:var(--safe-top) solid transparent}
+main:is(.merchant,.fleet,.demo-room){padding-left:var(--safe-left);padding-right:var(--safe-right);padding-bottom:var(--safe-bottom)}
+main.demo-room{padding-top:var(--safe-top)}
+
+/* Opened from the home screen: no rubber-band bounce on the full-screen map (the trip sheet keeps its own scroll), and long-presses on controls don't select text or open callouts. */
+@media(display-mode:standalone),(display-mode:fullscreen){
+  html:has(.aero-app.ux),html:has(.aero-app.ux) body{overscroll-behavior:none}
+  button,[role=button]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+}

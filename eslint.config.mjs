@@ -23,6 +23,13 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
     },
   },
+  {
+    rules: {
+      // vinext 1.0.0-beta.5: a next/link click throws and never navigates, so
+      // internal links are plain <a href> (see CLAUDE.md, tests/plain-links.test.ts).
+      "@next/next/no-html-link-for-pages": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

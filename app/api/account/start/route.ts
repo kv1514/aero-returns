@@ -1,5 +1,6 @@
 import {accountClient,accountConfig} from '@/lib/supabase-server';
 import {allowedProvider,sameOrigin} from '@/lib/account-policy';
+import {unsupported} from '@/lib/http';
 export const dynamic='force-dynamic';
 const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'private, no-store'}});
 export async function POST(request:Request){
@@ -16,3 +17,5 @@ export async function POST(request:Request){
     return reply({url:data.url});
   }catch{return reply({error:'Could not start sign-in. Please retry.'},400);}
 }
+const no=unsupported('POST');
+export const GET=no,HEAD=no,PUT=no,DELETE=no,PATCH=no,OPTIONS=no;

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { EVIDENCE_SQL, SCAN_LIMIT, collectEvidence, countSettledCompleted, evidenceChip, shareChip, type EvidenceDB } from '../lib/evidence';
+import { EVIDENCE_SQL, SCAN_LIMIT, collectEvidence, countSettledCompleted, evidenceChip, shareChip, verifiedCounts, type EvidenceDB } from '../lib/evidence';
 import { DEMO_PACKAGE, createReturn, type LiveFlight, type ReturnRecord } from '../lib/simulation';
 
 const t0 = 1700000000000, now = t0 + 3600_000;
@@ -27,7 +27,7 @@ test('evidence counts settled completions, live missions, Claude checks and dron
   put('c', t0 + 2, sim('c', { loaded: true, elapsed: 100_000, failed: true }));
   put('d', t0 + 3, live('d', 'COMPLETE'));
   put('e', t0 + 4, live('e', 'TO_DROP'));
-  put('f', t0 + 5, live('f', 'RETURNING', 'LINK_LOST')); // a fault pauses the mission: not complete yet
+  put('f', t0 + 5, live('f', 'LAND_DROP', 'LINK_LOST')); // a fault before the handoff pauses the mission: not complete yet
   put('g', t0 + 6, { ...sim('g'), review: { verdict: 'needs_person', condition: 'used', disposition: 'inspect', confidence: .6, explanation: 'x', model: 'm', eventId: 'e1', at: t0 } });
   put('h', t0 + 7, 'not json at all');
   event('1', 'agent', 'complete', { verdict: 'needs_person' }); event('2', 'agent', 'complete', { verdict: 'fly_standard' });
@@ -84,7 +84,7 @@ test('a record missing its clock is not counted as completed', () => {
 
 test('settled completion is computed from the record, never trusted from it', () => {
   assert.equal(countSettledCompleted([{ record: JSON.stringify(done('a')) }, { record: JSON.stringify(sim('b', { loaded: true, paused: true })) }, { record: '{' }, { record: JSON.stringify({ ...done('c'), facilityId: 'nowhere' }) }, { record: null }], now), 1);
-  assert.equal(countSettledCompleted([{ record: JSON.stringify(live('x', 'ABORTED')) }, { record: JSON.stringify({ ...live('y', 'COMPLETE'), cancelled: true }) }, { record: JSON.stringify(live('z', 'LAND_HOME')) }], now), 1);
+  assert.equal(countSettledCompleted([{ record: JSON.stringify(live('x', 'ABORTED')) }, { record: JSON.stringify({ ...live('y', 'TO_DROP'), cancelled: true }) }, { record: JSON.stringify(live('z', 'LAND_HOME')) }], now), 1);
 });
 
 test('chips show only real counts', () => {
@@ -96,4 +96,21 @@ test('chips show only real counts', () => {
   assert.deepEqual(shareChip(0, 0, 'Claude checks', 'sent to a person'), { text: 'Claude checks sent to a person: not yet recorded', recorded: false });
   assert.equal(shareChip(0, 4, 'Claude checks', 'sent to a person').recorded, false);
   assert.equal(shareChip(1, null, 'Claude checks', 'sent to a person').text, 'Claude checks sent to a person: unavailable');
+});
+
+test('a not-eligible check counts as sent to a person only when its owner booked it with the hold stamp', async () => {
+  const { d1, db } = database();
+  const agent = (id: string, owner: string, verdict: string) => db.prepare("INSERT INTO integration_events (id, owner, kind, created_at, status, result) VALUES (?, ?, 'agent', ?, 'complete', ?)").run(id, owner, t0, JSON.stringify({ verdict }));
+  const booked = (id: string, owner: string, eventId: string, hold: boolean) => db.prepare('INSERT INTO returns (id, owner, created_at, version, record) VALUES (?, ?, ?, 0, ?)').run(id, owner, t0, JSON.stringify({ ...sim(id), review: { verdict: 'not_drone_eligible', condition: 'new', disposition: 'inspect', confidence: .9, explanation: 'x', model: 'm', eventId, at: t0, ...(hold ? { hold: true } : {}) } }));
+  agent('np', 'o1', 'needs_person'); agent('held', 'o1', 'not_drone_eligible'); agent('unbooked', 'o1', 'not_drone_eligible'); agent('legacy', 'o1', 'not_drone_eligible'); agent('foreign', 'o1', 'not_drone_eligible'); agent('ok', 'o1', 'fly_standard');
+  booked('r1', 'o1', 'held', true); booked('r2', 'o1', 'held', true); booked('r3', 'o1', 'legacy', false); booked('r4', 'o2', 'foreign', true);
+  const evidence = await collectEvidence(d1, { anthropic: true, apify: false }, now);
+  assert.deepEqual([evidence.claudeChecks, evidence.claudeNeedsPerson], [6, 2], 'needs_person, plus the stamped one booked twice counted once; never booked, unstamped or another owner’s booking hold nothing');
+  assert.ok(!JSON.stringify(evidence).includes('not_drone_eligible'));
+});
+
+test('a session’s verified Claude calls include the return check and pickup photo, not only photo reviews', () => {
+  assert.deepEqual(verifiedCounts([{ kind: 'agent', n: 2 }, { kind: 'review', n: 1 }, { kind: 'pickup', n: 3 }, { kind: 'lookup', n: 4 }, { kind: 'other', n: 9 }]), { anthropic: 6, apify: 4 });
+  assert.deepEqual(verifiedCounts([]), { anthropic: 0, apify: 0 });
+  assert.deepEqual(verifiedCounts([{ kind: 'agent', n: null }, { kind: 'review', n: '2' }]), { anthropic: 2, apify: 0 });
 });

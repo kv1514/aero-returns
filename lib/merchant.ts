@@ -20,6 +20,31 @@ export const CONDITION_LABEL: Record<ReturnReview['condition'], string> = { new:
 export const PERSON_WAIT = 'Waiting for a person before it flies — inspect on arrival.';
 /** A flagged return a person cleared: it flies, and the dock still inspects it. */
 export const PERSON_APPROVED = 'Approved by a person — inspect on arrival.';
+/** A return booked without the Claude check. The check only runs before booking, so nothing is pending. */
+export const NO_CHECK = 'No Claude check';
+/** A stored review as the desk reads it: with Claude's questions when the record or its own agent event kept them. */
+export type DeskReview = ReturnReview & { questions?: string[] };
+/** Trimmed, deduplicated, at most five of 200 characters. Read defensively because the value comes from stored JSON. */
+const cleanQuestions = (questions: unknown) => (Array.isArray(questions) ? [...new Set(questions.filter((q): q is string => typeof q === 'string' && !!q.trim()).map(q => q.trim().slice(0, 200)))].slice(0, 5) : []);
+/** The questions Claude asked in the return check. Checks stored before questions were kept have none. */
+export const reviewQuestions = (review: DeskReview | null | undefined): string[] => cleanQuestions(review?.questions);
+/**
+ * Agent events to read Claude's questions from: a booked review keeps the verdict but not the questions, which stay in the
+ * owner's own agent event (lib/integration-server.ts). Only held rows show them, so only those are looked up, at most 50
+ * (D1 binds up to 100 values). The caller scopes the query to the owner.
+ */
+export const questionEventIds = (rows: MerchantRow[]) => [...new Set(rows.flatMap(r => (r.needsPerson && r.review && typeof r.review.eventId === 'string' && !Array.isArray(r.review.questions) ? [r.review.eventId] : [])))].slice(0, 50);
+/** Claude's questions by agent event id, from the stored event summaries. An unreadable row or one without questions is skipped. */
+export function questionsByEvent(events: { id: string; result: string }[]) {
+  const byEvent = new Map<string, string[]>();
+  for (const e of events) { try { const questions = cleanQuestions((JSON.parse(e.result) as { questions?: unknown } | null)?.questions); if (questions.length) byEvent.set(e.id, questions); } catch { /* skipped */ } }
+  return byEvent;
+}
+/** Adds the event's questions to each review stored without them. Questions the record already keeps always win. */
+export function withQuestions(view: MerchantView, byEvent: Map<string, string[]>): MerchantView {
+  if (!byEvent.size) return view;
+  return { ...view, rows: view.rows.map(r => { const questions = r.review && !Array.isArray(r.review.questions) ? byEvent.get(r.review.eventId) : undefined; return questions && r.review ? { ...r, review: { ...r.review, questions } } : r; }) };
+}
 /** Rounded down, so a grade just under the 85% gate never reads as 85%. The epsilon absorbs float error (.29 * 100 = 28.999…). */
 export const confidencePct = (confidence: number) => Math.floor(confidence * 100 + 1e-9);
 /** Whole minutes as "45 min", "1 h" or "2 h 5 min"; rounds first so 119.6 is "2 h", never "1 h 60 min". */
@@ -32,7 +57,8 @@ export type MerchantRow = {
   id: string; shortId: string; retailer: string; reference: string | null; createdAt: number;
   /** Snapshot state, exactly as the customer app derives it. */
   state: FlightState; live: boolean; stage: MerchantStage; status: string;
-  review: ReturnReview | null; disposition: MerchantDisposition; needsPerson: boolean; approvedAt: number | null; declinedAt: number | null;
+  review: DeskReview | null; disposition: MerchantDisposition; needsPerson: boolean; approvedAt: number | null; declinedAt: number | null;
+  /** `drone` is the live drone's name, or the simulated fleet drone's name when the record has one. */
   destination: string; drone: string | null; loadedAt: number | null; receivedAt: number | null;
 };
 export type MerchantAggregates = {
@@ -65,15 +91,23 @@ export function merchantRow(record: ReturnRecord, now: number): MerchantRow {
   const stage = stageOf(base === 'FAILED' ? 'ASSIGNED' : base), review = r.review ?? null;
   const at = (s: FlightState) => r.events.find(e => e.state === s)?.at ?? null;
   const held = heldForPerson(review) && state !== 'CANCELLED', declinedAt = review?.declinedAt ?? null;
-  const status = held ? 'On the ground until a person approves it' : state === 'CANCELLED' && declinedAt ? 'Declined for drone pickup by a person' : state === 'COMPLETED' && r.live ? 'Unload confirmed at the drop pad' : state === 'CANCELLED' && r.live && !r.cancelled ? 'Ended by the pilot' : STATUS[state];
+  const status = held ? 'On the ground until a person approves it' : state === 'CANCELLED' && declinedAt ? 'Declined for drone pickup by a person' : state === 'COMPLETED' && r.live ? 'Unload confirmed at the drop pad' : state === 'CANCELLED' && r.live && !r.cancelled ? 'Ended by the pilot' : state === 'ARRIVED_AT_PICKUP' && r.live?.phase === 'HOVER_PICKUP' ? hovering(r.live) : STATUS[state];
   return {
     id: r.id, shortId: shortId(r.id), retailer: r.package.retailer, reference: r.package.returnReference?.trim() || null, createdAt: r.createdAt,
     state, live: !!r.live, stage, status, review, disposition: review?.disposition ?? 'awaiting check',
     // Only a return still on hold is waiting; an approved one flies, and a cancelled one never arrives.
     needsPerson: held, approvedAt: review?.approvedAt ?? null, declinedAt,
-    destination: r.live ? 'Drop pad' : FACILITIES.find(f => f.id === r.facilityId)?.name ?? 'Demo facility', drone: r.live?.droneName ?? null,
+    destination: r.live ? 'Drop pad' : FACILITIES.find(f => f.id === r.facilityId)?.name ?? 'Demo facility', drone: r.live ? r.live.droneName ?? null : simulatedDrone(r),
     loadedAt: at('PACKAGE_LOADED'), receivedAt: stage === 'Received' ? at('COMPLETED') : null,
   };
+}
+
+/** A live drone holding over the pickup before it lands; flights from before pins were used have no pickupSource. */
+const hovering = (l: NonNullable<ReturnRecord['live']>) => (l.pickupSource === 'pin' ? 'Drone hovering over the customer’s pin' : 'Drone hovering over the pickup pad');
+/** Simulated returns may name their simulated fleet drone; older records don't, and a malformed value is ignored. */
+function simulatedDrone(r: ReturnRecord) {
+  const name = (r as { drone?: { name?: unknown } | null }).drone?.name;
+  return typeof name === 'string' && name.trim() ? name.trim().slice(0, 40) : null;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -99,12 +133,14 @@ export function needsPersonQueue(rows: MerchantRow[]) {
 }
 
 /** Why the server's gate sent a grade to a person, as far as the stored summary shows it. */
-export function needsPersonReasons(review: Pick<ReturnReview, 'condition' | 'confidence'>) {
+export function needsPersonReasons(review: Pick<ReturnReview, 'condition' | 'confidence'> & { verdict?: ReturnReview['verdict'] }) {
   const reasons: string[] = [];
+  // Held only with bookedReview's stamp: Claude's own measurements ruled out a package the entered ones allow.
+  if (review.verdict === 'not_drone_eligible') reasons.push('Claude found it may be outside the drone limits');
   if (review.condition === 'damaged') reasons.push('Possible damage');
   if (review.condition === 'unknown') reasons.push('Condition unclear from the description and any photos');
   if (review.confidence < CONFIDENT) reasons.push(`Low confidence (${confidencePct(review.confidence)}%, under ${CONFIDENT * 100}%)`);
-  // Not stored with the return: a description mismatch, or Claude asking for a person itself (including a not-eligible call the size rules don't back).
+  // Not stored with the return: a description mismatch, or Claude asking for a person itself (including a not-eligible call the size rules don't back, which the gate stores as needs_person).
   return reasons.length ? reasons : ['The item may not match its description, or Claude asked for a person to judge it'];
 }
 

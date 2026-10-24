@@ -3,14 +3,19 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import { Volume2, Square, RotateCcw, Sun, Moon, Contrast, Type } from 'lucide-react';
 type Preferences={theme:'light'|'dark'|'system';scale:number;font:boolean;contrast:boolean;motion:boolean};
 const defaults:Preferences={theme:'light',scale:1,font:false,contrast:false,motion:false};
+const KEY='aero:accessibility:v1';
+/** Status-bar colour of the installed app: white like the page, or the dark surface (--ux-bg) when AERO's own dark theme is on. */
+export const statusBarColor=(theme:string|undefined)=>theme==='dark'?'#141414':'#ffffff';
+const setStatusBar=(theme:string|undefined)=>document.querySelectorAll('meta[name="theme-color"]').forEach(m=>m.setAttribute('content',statusBarColor(theme)));
+// Read on the client's first render. The server renders the defaults, and nothing on screen depends on the settings until the Accessibility dialog opens.
+function stored():Preferences{if(typeof window==='undefined')return defaults;try{const p=JSON.parse(localStorage.getItem(KEY)||'null');if(p)return {...defaults,...p,scale:Math.min(1.3,Math.max(1,Number(p.scale)||1))};}catch{}return defaults;}
 let mounted=0;
 export function useAccessibility(){
-  const [prefs,setPrefs]=useState(defaults),[ready,setReady]=useState(false);
+  const [prefs,setPrefs]=useState(stored);
   // <body> survives soft navigation: clear the settings when no page applying them is left (e.g. /demo), but not between two pages that both apply them.
   // Layout-phase cleanup checked in a microtask: runs after the next page commits its own settings, but before paint.
-  useLayoutEffect(()=>{mounted++;return()=>{mounted--;queueMicrotask(()=>{if(mounted)return;const b=document.body.dataset;delete b.theme;delete b.contrast;delete b.font;delete b.motion;document.documentElement.style.removeProperty('--font-scale');});};},[]);
-  useEffect(()=>{try{const p=JSON.parse(localStorage.getItem('aero:accessibility:v1')||'null');if(p)setPrefs({...defaults,...p,scale:Math.min(1.3,Math.max(1,Number(p.scale)||1))});}catch{}setReady(true);},[]);
-  useEffect(()=>{if(!ready)return;const query=window.matchMedia('(prefers-color-scheme: dark)');const apply=()=>{document.body.dataset.theme=prefs.theme==='system'?(query.matches?'dark':'light'):prefs.theme;document.body.dataset.contrast=String(prefs.contrast);document.body.dataset.font=String(prefs.font);document.body.dataset.motion=String(prefs.motion);document.documentElement.style.setProperty('--font-scale',String(prefs.scale));};apply();query.addEventListener('change',apply);try{localStorage.setItem('aero:accessibility:v1',JSON.stringify(prefs));}catch{}return()=>query.removeEventListener('change',apply);},[prefs,ready]);
+  useLayoutEffect(()=>{mounted++;return()=>{mounted--;queueMicrotask(()=>{if(mounted)return;const b=document.body.dataset;delete b.theme;delete b.contrast;delete b.font;delete b.motion;document.documentElement.style.removeProperty('--font-scale');setStatusBar(undefined);});};},[]);
+  useEffect(()=>{const query=window.matchMedia('(prefers-color-scheme: dark)');const apply=()=>{const theme=prefs.theme==='system'?(query.matches?'dark':'light'):prefs.theme;document.body.dataset.theme=theme;setStatusBar(theme);document.body.dataset.contrast=String(prefs.contrast);document.body.dataset.font=String(prefs.font);document.body.dataset.motion=String(prefs.motion);document.documentElement.style.setProperty('--font-scale',String(prefs.scale));};apply();query.addEventListener('change',apply);try{localStorage.setItem(KEY,JSON.stringify(prefs));}catch{}return()=>query.removeEventListener('change',apply);},[prefs]);
   return {prefs,setPrefs};
 }
 export default function Accessibility({prefs,onChange,text}: {prefs:Preferences;onChange:(p:Preferences)=>void;text:string}){
