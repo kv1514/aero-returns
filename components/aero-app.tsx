@@ -25,6 +25,8 @@ async function api<T={record:ReturnRecord;now:number}>(path:string, options?:Req
 export default function AeroApp({initialId}: {initialId?:string}) {
   const {prefs,setPrefs}=useAccessibility();
   const mapConfig=useMapConfig();
+  const [demoAccount,setDemoAccount]=useState(false);
+  useEffect(()=>{let active=true;fetch('/api/account').then(r=>r.json() as Promise<{demo?:boolean}>).then(a=>{if(active)setDemoAccount(a.demo===true);}).catch(()=>{});return()=>{active=false;};},[]);
   const [pickupGuide,setPickupGuide]=useState<PickupGuide|null>(null);
   const [bookingDraft,setBookingDraft]=useState<BookingDraft|null>(null);
   useEffect(()=>{try{const saved=readDraft(sessionStorage.getItem(DRAFT_KEY));setBookingDraft(saved);if(!saved)sessionStorage.removeItem(DRAFT_KEY);}catch{}},[]);
@@ -68,7 +70,7 @@ export default function AeroApp({initialId}: {initialId?:string}) {
   return <main className={`aero-app ${mapConfig.key?'google-provider':''}`}>
     <header className="topbar"><button className="brand" onClick={()=>setDialog('about')} aria-label="About AERO"><span className="brand-symbol"><svg viewBox="0 0 30 30"><path d="M2 25 12 4h6l10 21H19L15 14l-5 11Z" fill="currentColor"/><path d="m4 22 20-8" stroke="white" strokeWidth="2.5"/></svg></span>AERO<span className="brand-caption">Returns, reimagined.</span></button>
       <nav aria-label="Main navigation"><button className={dialog!=='history'?'nav-active':''} onClick={()=>setDialog(null)}>Live tracking<span/></button><button onClick={showHistory} className={dialog==='history'?'nav-active':''}>My returns</button><button onClick={()=>setDialog('about')}>How it works</button></nav>
-      <div className="header-actions"><span className="demo-badge"><span/>Simulation</span><button className="icon-button notifications" onClick={()=>setDialog('activity')} aria-label="View flight notifications"><Bell size={20}/>{record&&<i/>}</button><button className="new-return" onClick={()=>setDialog('booking')}><Plus size={16}/>New return</button><button className="icon-button access-button" aria-label="Accessibility settings" onClick={()=>setDialog('accessibility')}><SlidersHorizontal size={18}/></button><button className="avatar" aria-label="Your account" onClick={()=>setDialog('session')}><LogInIcon/></button></div>
+      <div className="header-actions"><span className="demo-badge"><span/>{demoAccount?'Demo account':'Simulation'}</span><button className="icon-button notifications" onClick={()=>setDialog('activity')} aria-label="View flight notifications"><Bell size={20}/>{record&&<i/>}</button><button className="new-return" onClick={()=>setDialog('booking')}><Plus size={16}/>New return</button><button className="icon-button access-button" aria-label="Accessibility settings" onClick={()=>setDialog('accessibility')}><SlidersHorizontal size={18}/></button><button className="avatar" aria-label="Your account" onClick={()=>setDialog('session')}><LogInIcon/></button></div>
     </header>
     <section className="tracking-canvas">
       <FlightMap config={mapConfig} onConfigure={()=>setDialog('maps')} record={r} clockOffset={offset} stale={offline} frozenAt={lastSync} booking={false} onPin={()=>{}}/>

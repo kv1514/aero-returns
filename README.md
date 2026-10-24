@@ -6,6 +6,12 @@ Source: [kv1514/aero-returns](https://github.com/kv1514/aero-returns) (private).
 
 Continuing with Claude? Start with [`CLAUDE.md`](CLAUDE.md) and [`docs/HANDOFF.md`](docs/HANDOFF.md) for current status, setup, verification, and next steps.
 
+## Try the built-in demo account
+
+Open **Your account → Try demo account**. Alex Demo opens immediately without a Google/Amazon account or password. The app starts a sample return on first entry; book another return or use Demo controls to practice the pickup-to-receipt journey. Confirm package loading before departure.
+
+Alex is a simulated profile with separate, browser-specific practice history. **Exit demo account** restores the previous account. Re-entering resumes Alex's history while the browser's 30-day demo cookie remains available. It never signs everyone into a shared Supabase user, and it does not bypass the private Sites gate.
+
 ## Run locally
 
 Node 22.13+ is required. Node 24 is recommended.
@@ -89,6 +95,7 @@ python3 tests/test_product_actor.py
 # With local server running:
 node_modules/.bin/tsx scripts/smoke.ts
 node_modules/.bin/tsx scripts/location-account-smoke.ts
+node_modules/.bin/tsx scripts/demo-account-smoke.ts
 ```
 
 Tests cover distance, route interpolation, compatibility, explicit pickup gating, complete handoff, pause/resume/speed changes, persistence, interruption, cancellation, review uncertainty, URL allowlisting, and Actor extraction. The HTTP smoke test creates a demo return and checks session isolation, the full journey, and persistence. Tests never call Anthropic or Apify. Live credentialed verification remains separate.

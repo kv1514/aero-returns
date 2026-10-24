@@ -67,3 +67,9 @@ Photos are resized/re-encoded locally to remove source metadata and kept only in
 Files: `components/pickup-guide.tsx`, `lib/pickup-guide.ts`, `app/api/pickup-review/route.ts`, `public/sample-pickup.svg`. The three new unit tests cover ambiguous detections, untrusted bounds/text, and boundary-safe manual framing (32 tests total).
 
 Pickup-guide verification: typecheck, production build, all 32 unit tests, existing booking/location-account HTTP smoke scripts, and pickup-review missing-provider/no-store/CSRF checks pass. Hosted browser checks verified the illustrated scene, click-to-mark, frame sliders, explicit confirmation, reopening without losing the reference, edit invalidation, and the labeled overlay animation. Automated real-file selection was blocked by the Chrome ChatGPT extension's disabled “Allow access to file URLs” permission; no permission was changed. Real upload and live Anthropic detection must still be verified. No physical pickup was triggered.
+
+## Built-in demo account
+
+Your account → Try demo account opens **Alex Demo**, an explicitly simulated browser-specific profile. No provider login is required. The app's normal first-run initialization creates a sample return. Exit demo account restores the prior Google/Sites/guest identity; re-entering retains Alex's practice history. The mode is visible in the header, and no shared Supabase user or static password is used.
+
+Implementation: `lib/demo-account.ts`, `/api/account/demo`, `lib/server.ts`, account API/panel, and header indicator. Local verification: 34 TypeScript tests, 4 Actor tests, typecheck, existing booking/location HTTP smoke scripts, and the new `scripts/demo-account-smoke.ts` isolation/full-journey checks pass. No real drone, payment, or retailer action takes place.

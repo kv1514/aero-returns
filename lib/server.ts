@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { z } from 'zod';
 import {verifiedAccount} from './supabase-server';
+import {demoIdentity} from './demo-account';
 import { control, createReturn, settle, snapshot, type ReturnRecord } from './simulation';
 const packageSchema = z.object({
   retailer: z.enum(['Amazon', 'Nike', 'Zara', 'Other']), method: z.enum(['qr', 'label']),
@@ -10,6 +11,8 @@ const packageSchema = z.object({
 });
 const actionSchema = z.object({ action: z.enum(['load','pause','resume','advance','reset','cancel','speed','fail','retry']), rate: z.number().optional() });
 export async function session(request: Request) {
+  const demo=demoIdentity(request.headers.get('cookie'));
+  if(demo)return {...demo,cookie:''};
   const account=await verifiedAccount();
   if(account)return {owner:account.owner,cookie:''};
   const user = request.headers.get('oai-authenticated-user-id');

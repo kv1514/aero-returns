@@ -64,3 +64,11 @@ Google's publishing status remains **Testing** with the owner's Google account r
 Hosted browser verification on October 23, 2026 (Pacific): first Google consent/login returned `auth=success`; the account panel displayed the verified name/email; reload preserved the session; sign-out restored the original demo history; signing in again returned to the same separate Google-owned return history. Live tests with a second Google account, cancellation after consent, and expiration/replay scenarios remain outstanding; existing offline policy/ownership checks are documented in HANDOFF.
 
 `SUPABASE_GOOGLE_ENABLED=true` is deployed. `SUPABASE_AMAZON_ENABLED=false` remains intentional: the owner deferred Amazon Developer registration. The deployed adapter is ready for that future setup, but there is no Amazon client/security profile or successful Amazon login. Do not reuse SideSpace projects or the Maps Demo Project for this setup.
+
+## Built-in demo profile
+
+`POST /api/account/demo` enters Alex Demo without OAuth. A random UUID capability is stored in a 30-day HttpOnly/SameSite=Lax cookie (`Secure` over HTTPS), plus an explicit active-mode cookie. Server ownership is `demo:<capability>` and is isolated from Supabase, Sites, guest identities, and other browsers. A missing/invalid capability in active mode fails closed. The capability never appears in the account JSON.
+
+`DELETE /api/account/demo` (or account sign-out in demo mode) clears active mode only. The original Google/Sites session is preserved, and the inactive demo cookie allows practice history to resume. Both mutations require the exact request Origin. Mode switches clear booking drafts and broadcast a reload to other tabs; photo references are memory-only and cleared by reload. No shared email/password, Supabase user, purchase access, or retailer authorization is created. The owner-private Sites gate still applies.
+
+`tests/demo-account.test.ts` checks identity namespaces, invalid sessions, and cookie attributes. `scripts/demo-account-smoke.ts` checks origin rejection, demo/original and browser-to-browser read/write isolation, loading confirmation, completion persistence, exit/resume, and invalid-session recovery against a running local app. Demo mode is explicitly displayed in the header and account panel.
