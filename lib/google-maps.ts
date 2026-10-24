@@ -1,5 +1,6 @@
 import {latLng,nearbyWithin,type NearbyPlace} from './location';
 import type {Point} from './simulation';
+export {geocode} from './geocoding';
 export type GoogleConfig={key:string;mapId:string};
 export type GLocation={lat():number;lng():number};
 type Listener={remove():void};
@@ -12,7 +13,6 @@ export interface GoogleSDK{
  LatLngBounds:new()=>GBounds;
  Polyline:new(options:Record<string,unknown>)=>GLine;
  marker:{AdvancedMarkerElement:new(options:Record<string,unknown>)=>GMarker};
- Geocoder:new()=>{geocode(request:Record<string,unknown>):Promise<{results:{formatted_address:string;geometry:{location:GLocation}}[]}>};
  places:{Place:{searchByText(request:Record<string,unknown>):Promise<{places:{id:string;displayName?:string;formattedAddress?:string;location?:GLocation;businessStatus?:string;googleMapsURI?:string}[]}>}};
  event:{clearInstanceListeners(instance:unknown):void};
 }
@@ -24,12 +24,11 @@ export function loadGoogle(key:string):Promise<GoogleSDK>{
  loading=new Promise((resolve,reject)=>{
   const script=document.createElement('script');const timer=setTimeout(()=>reject(new Error('Google Maps did not load. Check your connection and key settings.')),20000);
   window.aeroGoogleReady=()=>{clearTimeout(timer);if(window.google?.maps)resolve(window.google.maps);else reject(new Error('Google Maps is unavailable.'));};
-  window.gm_authFailure=()=>{clearTimeout(timer);window.dispatchEvent(new Event('aero:google-auth-error'));reject(new Error('Google rejected this key. Check billing, enabled APIs, and website restrictions.'));};
-  script.src='https://maps.googleapis.com/maps/api/js?'+new URLSearchParams({key,loading:'async',callback:'aeroGoogleReady',v:'quarterly',libraries:'maps,marker,places,geocoding'});
+  window.gm_authFailure=()=>{clearTimeout(timer);window.dispatchEvent(new Event('aero:google-auth-error'));reject(new Error('Google rejected this key. Check API access, quota, and website restrictions.'));};
+  script.src='https://maps.googleapis.com/maps/api/js?'+new URLSearchParams({key,loading:'async',callback:'aeroGoogleReady',v:'quarterly',libraries:'maps,marker,places'});
   script.async=true;script.onerror=()=>{clearTimeout(timer);reject(new Error('Could not connect to Google Maps.'));};document.head.appendChild(script);
  });return loading;
 }
-export async function geocode(key:string,input:string|Point){const g=await loadGoogle(key);const result=await new g.Geocoder().geocode(typeof input==='string'?{address:input}:{location:latLng(input)});return result.results.map(r=>({address:r.formatted_address,point:[r.geometry.location.lng(),r.geometry.location.lat()] as Point}));}
 export const PLACE_QUERIES={'UPS drop-offs':'UPS Store UPS Access Point package drop off','Other drop-offs':'package shipping drop off FedEx USPS','Warehouses':'warehouse distribution center'} as const;
 export async function searchNearby(config:GoogleConfig,center:Point,category:keyof typeof PLACE_QUERIES,radius:number):Promise<NearbyPlace[]>{
  const g=await loadGoogle(config.key);const {places}=await g.places.Place.searchByText({textQuery:PLACE_QUERIES[category],fields:['id','displayName','formattedAddress','location','businessStatus','googleMapsURI'],locationBias:{center:latLng(center),radius},maxResultCount:20});

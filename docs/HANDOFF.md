@@ -22,18 +22,18 @@ The goal is a polished, interactive 3–5 minute Cal Hacks returns demo, with us
 
 Same-tab booking recovery now preserves package details, pickup, return reference and wizard step through closing/reloading. Draft parsing rejects corrupt, expired and out-of-area data. Confirmation consent is not restored. Blank pickup labels are rejected client and server side. Return references appear in review and receipts. `/demo` now includes Google/Amazon readiness and direct GitHub/handoff links. GitHub Actions checks future pushes and pull requests.
 
-The latest browser QA attempt was blocked by the browser URL policy, so fresh mobile/visual verification and a demo recording remain outstanding. Code, HTTP checks, and build verification remain available; do not describe them as browser tests.
+Hosted HTTPS browser QA is working. Google map rendering and a nearby UPS search returned 20 real listings around the demo pickup. The local browser URL was previously blocked; do not work around that policy. Mobile layout and a demo recording remain outstanding.
 
 ## Next work that needs credentials
 
-1. Configure Google Maps JavaScript API, Geocoding API, Places API (New), billing, referrer/API restrictions and quotas. Test actual map loading, search, permission denied, inaccurate location, zero results, and mobile layout. No real Google key was provided during implementation.
+1. Google’s free Maps Demo Key is now configured in Sites runtime secrets, with no billing enabled. It is limited to testing/evaluation, with daily quotas. Google’s Keys & Credentials screen requires an upgrade to edit restrictions; no upgrade was performed. Keep it free. The legacy JS Geocoder failed with this key, so address/reverse lookup now uses Geocoding API v4. Verify address lookup after publication, plus permission denied, inaccurate location, zero results, and mobile layout. Never commit the key.
 2. Register Login with Amazon. Set `AMAZON_CLIENT_ID`, server-only `AMAZON_CLIENT_SECRET`, and the exact registered `AMAZON_REDIRECT_URI`. Test success, cancellation, expired/reused state, disconnect, and separate-owner isolation. No Amazon credentials were provided; the live authorization exchange remains unverified.
 3. Add Anthropic and Apify credentials if pursuing those sponsor tracks; record real successful evidence. The Python Actor must be deployed in the team's own Apify account.
 4. Run the end-to-end demo with a human presenter. Confirm location and retailer acceptance language remains honest. Do not expand into real drone controls merely to make a demo look live.
 
 ## Verification at handoff
 
-Typecheck and production build pass. All 21 TypeScript tests pass. Local HTTP smoke checks pass for the complete booking journey, session isolation, Maps configuration, Amazon missing-setup state, cross-origin rejection, and invalid callback rejection. Browser interaction verified Amazon import opening a prefilled booking and nearby discovery leading to Maps configuration without a key. Real Google and Amazon calls are unverified until credentials are configured.
+Typecheck and production build pass. The previous 21 TypeScript tests and four new Geocoding v4 tests cover local behavior. Local HTTP smoke checks pass for the complete booking journey, session isolation, Maps configuration, Amazon missing-setup state, cross-origin rejection, and invalid callback rejection. Browser interaction verified Amazon import opening a prefilled booking and nearby discovery leading to Maps configuration without a key. Real Google Maps rendering and UPS search are verified on the hosted prototype; Amazon authorization remains unverified.
 
 ## Code map
 
