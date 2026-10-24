@@ -73,3 +73,16 @@ Pickup-guide verification: typecheck, production build, all 32 unit tests, exist
 Your account → Try demo account opens **Alex Demo**, an explicitly simulated browser-specific profile. No provider login is required. The app's normal first-run initialization creates a sample return. Exit demo account restores the prior Google/Sites/guest identity; re-entering retains Alex's practice history. The mode is visible in the header, and no shared Supabase user or static password is used.
 
 Implementation: `lib/demo-account.ts`, `/api/account/demo`, `lib/server.ts`, account API/panel, and header indicator. Local verification: 34 TypeScript tests, 4 Actor tests, typecheck, existing booking/location HTTP smoke scripts, and the new `scripts/demo-account-smoke.ts` isolation/full-journey checks pass. No real drone, payment, or retailer action takes place.
+
+## Live drone control (October 24, 2026)
+
+Branch `feature/live-drone-control` adds real drone control on a new **/fly** page, separate from the simulated return tracking.
+
+- **Website.** `/fly` (`components/drone-control.tsx`, `components/drone-map.tsx`). Link a drone and copy its one-time token. Watch live telemetry on a vector map (safety-zone circle, trail, planned route), pick A/B on the map or use "Fly my latest return", then Hold / Land / Return home. Pilot codes let other accounts fly; the Text backup tab builds or sends signed SMS commands. The header now links to `/fly`.
+- **Server.** `lib/drone-protocol.ts` holds the pure schemas, `preflight`, priorities, token and SMS signing. `lib/drone-server.ts` handles D1 and routes under `app/api/drones/**` and `app/api/drone/sync`. Migration: `drizzle/0002_live_drones.sql`. Optional env: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`.
+- **Drone.** `drone-agent/aero_agent.py` covers ArduPilot over MAVLink via pymavlink, a built-in `--sim` vehicle, the 4G modem SMS reader, failsafes and a systemd unit. `scripts/fake-drone.ts` is a Node simulated drone with the same protocol.
+- **Tracking page polish.** Keyless OpenFreeMap vector basemap; the CARTO raster tiles were watermarking "API key required" at street zoom. Three labeled simulated fleet drones (`lib/fleet.ts`) loop continuously on both Google and MapLibre maps. Phone layout: overlays restacked above the sheet, notifications/3D buttons hidden, fit padding increased.
+
+Verification on Windows: typecheck, build, 43 TypeScript tests (9 new), `scripts/drone-smoke.ts` (ownership, tokens, rotation, priorities, pilots, SMS), and a browser end-to-end flight with `scripts/fake-drone.ts`: create link → connect → pick B → takeoff → cruise → land → "done". Not yet run: `drone-agent/test_agent.py` (no local Python; it is wired into GitHub Actions), ArduPilot SITL, and real hardware.
+
+Windows note: deep checkout paths break npm and local D1. Map the folder to a drive letter (`subst R: <path>`), set `AERO_LOCAL_STATE` to a short folder (see `vite.config.ts`), and pass the same folder to `wrangler d1 execute --persist-to`.

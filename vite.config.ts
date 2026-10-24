@@ -59,6 +59,12 @@ export default defineConfig(async ({ command }) => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
+        // Windows: SQLite cannot open local D1 files under very deep checkouts.
+        // Point AERO_LOCAL_STATE at a short folder and pass the same path to
+        // `wrangler d1 execute --persist-to` when applying migrations.
+        ...(process.env.AERO_LOCAL_STATE
+          ? { persistState: { path: process.env.AERO_LOCAL_STATE } }
+          : {}),
         config: {
           ...localBindingConfig,
           ...(command === "serve"

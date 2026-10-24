@@ -22,6 +22,8 @@ export async function session(request: Request) {
   return { owner: `guest:${token}`, cookie: cookie ? '' : `aero_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}` };
 }
 export async function handle(request: Request, id?: string): Promise<Response> {
+  // Read the body before any early reply: an unread body breaks the next request on a kept-alive connection.
+  const body = request.method === 'GET' || request.method === 'HEAD' ? '' : await request.text();
   let identity:Awaited<ReturnType<typeof session>>;
   try{identity=await session(request);}catch{return Response.json({error:'Your account session expired or is unavailable. Open Your account to sign in again.'},{status:401,headers:{'Cache-Control':'private, no-store'}});}
   const {owner,cookie}=identity;
@@ -39,7 +41,7 @@ export async function handle(request: Request, id?: string): Promise<Response> {
       return reply({ returns: rows.results.map(row => settle(JSON.parse(row.record), now)), now });
     }
     if (!id && request.method === 'POST') {
-      const raw = await request.text(); if (raw.length > 12000) return reply({ error: 'Request is too large.' }, 413);
+      const raw = body; if (raw.length > 12000) return reply({ error: 'Request is too large.' }, 413);
       const pkg = packageSchema.parse(JSON.parse(raw));
       const count = await db.prepare('SELECT COUNT(*) AS n FROM returns WHERE owner = ? AND created_at > ?').bind(owner, now - 3600000).first<{n: number}>();
       if ((count?.n || 0) >= 40) return reply({ error: 'You have created 40 demos this hour. Please reuse a return or try again later.' }, 429);
@@ -52,7 +54,7 @@ export async function handle(request: Request, id?: string): Promise<Response> {
     if (!row) return reply({ error: 'This return is not available in this session.' }, 404);
     const existing: ReturnRecord = JSON.parse(row.record); let r = settle(existing, now);
     if (request.method === 'PATCH') {
-      const raw = await request.text(); if (raw.length > 1000) return reply({ error: 'Request is too large.' }, 413);
+      const raw = body; if (raw.length > 1000) return reply({ error: 'Request is too large.' }, 413);
       const { action, rate } = actionSchema.parse(JSON.parse(raw)); r = control(r, action, now, rate);
     }
     if (request.method !== 'GET' && request.method !== 'PATCH') return reply({ error: 'Method not allowed.' }, 405);

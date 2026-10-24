@@ -1,6 +1,10 @@
 # AERO — Returns, without the trip
 
-A map-first, end-to-end **simulated** drone returns app for the Cal Hacks 13.0 demo. The app lives separately from the parent arbitrage engine. It never sends physical flight commands, creates a carrier return, charges a payment method, or approves a retailer refund.
+A map-first drone returns app for the Cal Hacks 13.0 demo. The app lives separately from the parent arbitrage engine. The return journey on the tracking page is **simulated**. It never creates a carrier return, charges a payment method, or approves a retailer refund.
+
+**Live drone control (`/fly`).** A separate Fly page links a real drone over 4G. An agent on the drone's onboard computer (`drone-agent/aero_agent.py`, ArduPilot over MAVLink) syncs once per second. Owners and invited pilots then see it move live and fly it from A to B inside a geofence, with Hold / Land / Return home controls and signed SMS commands as a backup. Every flight is checked on the server and again on the drone. Protocol, safety model and setup: [`docs/DRONE_API.md`](docs/DRONE_API.md) and [`drone-agent/README.md`](drone-agent/README.md). No hardware? `scripts/fake-drone.ts` or `aero_agent.py --sim` provide a simulated drone that speaks the same protocol.
+
+Apply `drizzle/0002_live_drones.sql` (same command as the other migrations below) before using `/fly` locally.
 
 Source: [kv1514/aero-returns](https://github.com/kv1514/aero-returns) (private). GitHub Actions runs typechecks, unit tests, Actor tests, and a build on changes.
 
@@ -29,7 +33,7 @@ Local development prints its URL, normally `http://127.0.0.1:5173`. Hosted Sites
 
 ## What works
 
-- A full-screen MapLibre map using CARTO Positron raster tiles and OpenStreetMap data, with attribution. No map token is required. An animated schematic route keeps the demo usable if map initialization fails; geographic tiles require a network connection.
+- A full-screen MapLibre map using the keyless OpenFreeMap Positron vector style (OpenMapTiles, OpenStreetMap data), with attribution. No map token is required. Three labeled, simulated fleet drones loop between the demo hubs so the map is always moving. An animated schematic route keeps the demo usable if map initialization fails; geographic tiles require a network connection.
 - A deterministic, elapsed-time flight model with geographic distance, heading, continuous marker interpolation, altitude, speed, battery, ETA, and traveled/remaining route lines.
 - Pause, resume, 1×/5×/10× speed, next milestone, interruption/recovery, and reset controls. A normal demo takes about 3–5 minutes plus the user's pickup confirmation.
 - Booking with three Berkeley pickup choices, geolocation within the demo area, package details, QR image decoding, standard/priority capacity checks, and automatic compatible-facility ranking.
@@ -54,7 +58,7 @@ Deploy the folder as an Actor in your Apify account, build it, and set `APIFY_AC
 
 ### Deliberate scope
 
-Return records use D1; optional social sign-in uses Supabase Auth. Convex is not used. It uses browser speech, not Cartesia or ElevenLabs. Nessie, Fetch/ASI:One, x402, and physical drone controls are **not implemented**. Merely referencing a sponsor in the research page is not a working integration. The current submission strategy prioritizes useful return workflows instead of unrelated tools. The broader household-drone plan remains a roadmap.
+Return records use D1; optional social sign-in uses Supabase Auth. Convex is not used. It uses browser speech, not Cartesia or ElevenLabs. Nessie, Fetch/ASI:One and x402 are **not implemented**. Physical drone control exists only on `/fly` (see Live drone control above); the return simulation never drives hardware. Merely referencing a sponsor in the research page is not a working integration. The current submission strategy prioritizes useful return workflows instead of unrelated tools. The broader household-drone plan remains a roadmap.
 
 ## Environment variables
 
@@ -100,9 +104,9 @@ node_modules/.bin/tsx scripts/demo-account-smoke.ts
 
 Tests cover distance, route interpolation, compatibility, explicit pickup gating, complete handoff, pause/resume/speed changes, persistence, interruption, cancellation, review uncertainty, URL allowlisting, and Actor extraction. The HTTP smoke test creates a demo return and checks session isolation, the full journey, and persistence. Tests never call Anthropic or Apify. Live credentialed verification remains separate.
 
-## Real hardware later
+## Real hardware
 
-A real service needs an authenticated telemetry adapter, reliable command/ack protocol, a physical pickup interlock, flight authorization, airspace and site permissions, fleet dispatch, verified carrier/retailer acceptance, operational safety, privacy review, and real payments. Geodesic demo routes are not proof that a flight is legal or safe. The user's proposed indoor pad protocol is documented as a future boundary in `docs/DRONE_API.md`; no endpoint here accepts hardware commands.
+`/fly` plus `drone-agent/` provide an authenticated telemetry link, a command/ack protocol with expiry and safety priority, geofence/altitude/battery checks on both server and drone, link-loss and manual-takeover failsafes, and signed SMS backup. A real returns service still needs a physical pickup interlock, flight authorization, airspace and site permissions, fleet dispatch, verified carrier/retailer acceptance, privacy review, and real payments. Geodesic demo routes are not proof that a flight is legal or safe. The live link has been verified end to end against the simulated drone; it has not yet flown real hardware or ArduPilot SITL in this repository.
 
 ## Cal Hacks submission
 

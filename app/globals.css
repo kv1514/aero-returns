@@ -58,3 +58,39 @@ body[data-theme='dark'] .earth-entry{background:#1c2b3e;color:#e3eaf5}body[data-
 .pickup-confirmed{display:flex;gap:8px;border-radius:10px;padding:12px;background:#eef8f2;color:#267451}.pickup-confirmed strong{font-size:11px}.pickup-confirmed p{font-size:10px;line-height:1.7;margin-top:6px}.pickup-confirmed button{font-size:10px;margin-top:12px}.pickup-privacy{display:flex;gap:8px;align-items:flex-start;margin:21px 0 0;color:var(--muted)}.pickup-privacy p{font-size:10px;line-height:1.7}.pickup-scan-line{position:absolute;inset:0 0 auto;height:3px;background:#b4ffdc;box-shadow:0 0 24px 10px #8df1bd55;animation:pickup-scan 2.4s ease-in-out;pointer-events:none}@keyframes pickup-scan{from{top:0}to{top:100%}}
 @media(max-width:650px){.pickup-guide{padding:18px 16px}.explorer-tabs{padding:12px 16px 0}.explorer-tabs button{flex:1;font-size:11px;padding:11px 8px}.pickup-heading h3{font-size:26px}.pickup-steps{gap:9px;font-size:9px;justify-content:space-between}.pickup-steps li{gap:5px}.pickup-workspace{grid-template-columns:1fr}.pickup-location{padding:12px 10px;gap:8px}.pickup-location>a{font-size:10px}.pickup-location strong{font-size:11px}.pickup-empty{padding:25px 12px 18px}.pickup-box>span{font-size:8px}}
 @media(prefers-reduced-motion:reduce){.pickup-scan-line{animation:none;top:50%}}body[data-motion=true] .pickup-scan-line{animation:none;top:50%}body[data-theme=dark] :is(.pickup-entry,.pickup-empty,.pickup-camera){background:#233147;border-color:#3a4d68}body[data-theme=dark] .explorer-tabs button[aria-pressed=true]{background:#233b60;color:#bfd7ff}body[data-theme=dark] .pickup-confirmed{background:#203e36;color:#a3dbc2}body[data-contrast=true] :is(.pickup-heading>p,.pickup-image-caption,.pickup-ai p,.pickup-ai small,.pickup-privacy,.pickup-entry small){color:var(--ink)}
+
+/* Live drone entry points */
+.topbar nav .nav-fly{height:100%;display:flex;align-items:center;gap:7px;text-decoration:none;font-size:calc(13px * var(--font-scale, 1));color:#1d4ed8;font-weight:600}
+.nav-live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #22c55e2b;animation:live-dot 2s ease-in-out infinite}
+@keyframes live-dot{50%{box-shadow:0 0 0 6px #22c55e10}}
+.fly-entry{display:none;align-items:center;gap:5px;text-decoration:none;font-size:calc(11px * var(--font-scale, 1));font-weight:650;color:#1d4ed8;background:#eef4ff;border-radius:8px;padding:8px 10px}
+body[data-theme=dark] .fly-entry{background:#1e3358;color:#bfd7ff}
+/* Ambient simulated fleet that keeps flying its loops */
+.fleet-marker{width:46px;height:46px;position:relative}
+.fleet-marker .drone-graphic{position:absolute;inset:9px;filter:drop-shadow(0 9px 4px #2334462e);z-index:2}
+.fleet-marker .drone-graphic svg{animation:fleet-bob 2.4s ease-in-out infinite}
+.fleet-marker .fleet-shadow{position:absolute;left:50%;top:50%;width:20px;height:7px;margin:13px 0 0 -10px;border-radius:50%;background:#0f172a1f;filter:blur(2px)}
+.fleet-marker span{position:absolute;top:calc(100% - 4px);left:50%;transform:translateX(-50%);font-size:calc(8px * var(--font-scale, 1));font-weight:700;letter-spacing:.6px;color:#5b6778;background:#ffffffe0;border-radius:4px;padding:2px 5px;white-space:nowrap;z-index:3}
+@keyframes fleet-bob{50%{transform:translateY(-2px) scale(1.02)}}
+.drone-map-marker .drone-graphic svg{animation:fleet-bob 2s ease-in-out infinite}
+body[data-motion=true] :is(.fleet-marker .drone-graphic svg,.drone-map-marker .drone-graphic svg,.nav-live-dot){animation:none}
+@media(prefers-reduced-motion:reduce){:is(.fleet-marker .drone-graphic svg,.drone-map-marker .drone-graphic svg,.nav-live-dot){animation:none}}
+/* Phone layout: stack map overlays above the bottom sheet instead of on top of each other */
+@media(max-width:1000px){.topbar nav .nav-fly{font-size:calc(11px * var(--font-scale, 1))}}
+@media(max-width:760px){
+  .fly-entry{display:inline-flex}
+  .header-actions .notifications{display:none}
+  .map-intro h2{display:none}
+  .map-intro{top:18px}
+  .map-status{top:14px}
+  .map-controls{top:58px}
+  .map-view-controls{display:none}
+  .earth-entry{top:auto;right:16px;bottom:426px;font-size:calc(10px * var(--font-scale, 1));padding:8px 11px;gap:6px}
+  .earth-entry svg{width:14px;height:14px}
+  .simulator-toggle{left:16px;bottom:426px;font-size:calc(10px * var(--font-scale, 1));padding:8px 11px;border-radius:20px;background:#fff;border:1px solid var(--line);box-shadow:0 4px 16px #12234412;color:#4b5a6d}
+  .simulator-panel{bottom:470px}
+  .telemetry-panel{bottom:346px}
+  .connection-error{top:auto;bottom:470px}
+  .fleet-marker{width:38px;height:38px}.fleet-marker .drone-graphic{inset:7px}
+}
+@media(max-width:760px) and (max-height:760px){.earth-entry,.simulator-toggle{bottom:412px}.simulator-panel{bottom:456px}.telemetry-panel{bottom:336px}}

@@ -4,9 +4,16 @@ import { Crosshair, Plus, Minus, Maximize, Navigation, Layers, MapPin } from 'lu
 import type { Map as MapLibreMap, GeoJSONSource, Marker } from 'maplibre-gl';
 import { snapshot, routes, FACILITIES, type ReturnRecord } from '@/lib/simulation';
 import { droneMarkerSvg } from './drone';
+import { FLEET, fleetPositions, MAP_ATTRIBUTION, MAP_STYLE } from '@/lib/fleet';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 const line = (coordinates: number[][]) => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates } });
+export function fleetMarkerElement(id: string) {
+  const el = document.createElement('div'); el.className = 'fleet-marker';
+  el.innerHTML = `<div class="fleet-shadow"></div><div class="drone-graphic">${droneMarkerSvg}</div><span></span>`;
+  el.querySelector('span')!.textContent = id; el.title = `${id} · simulated fleet`;
+  return el;
+}
 export default function FlightMap({ record, clockOffset, stale, frozenAt, booking, onPin }: {record: ReturnRecord; clockOffset: number; stale: boolean; frozenAt: number; booking: boolean; onPin: (p: [number,number]) => void}) {
   const container = useRef<HTMLDivElement>(null), map = useRef<MapLibreMap | null>(null), drone = useRef<Marker | null>(null), markers = useRef<Marker[]>([]);
   const current = useRef({record, clockOffset, stale, frozenAt}); current.current = {record, clockOffset, stale, frozenAt};
@@ -22,7 +29,7 @@ export default function FlightMap({ record, clockOffset, stale, frozenAt, bookin
   const projectedDrone=project(fallbackSnapshot.point);
   function fit() {
     const path = routes(current.current.record), coords = [...path.inbound, ...path.outbound], mobile = window.innerWidth < 760;
-    map.current?.fitBounds([[Math.min(...coords.map(p=>p[0]))-.002, Math.min(...coords.map(p=>p[1]))-.001],[Math.max(...coords.map(p=>p[0]))+.002, Math.max(...coords.map(p=>p[1]))+.001]], {padding: mobile ? {left:35,right:35,top:100,bottom:340} : {left:475,right:150,top:160,bottom:180}, duration: 1300, maxZoom:14.5, pitch:0, bearing:0});
+    map.current?.fitBounds([[Math.min(...coords.map(p=>p[0]))-.002, Math.min(...coords.map(p=>p[1]))-.001],[Math.max(...coords.map(p=>p[0]))+.002, Math.max(...coords.map(p=>p[1]))+.001]], {padding: mobile ? {left:40,right:60,top:90,bottom:450} : {left:475,right:150,top:160,bottom:180}, duration: 1300, maxZoom:14.5, pitch:0, bearing:0});
     followRef.current = false; setFollow(false); setCinematic(false);
   }
   useEffect(() => {
@@ -31,10 +38,14 @@ export default function FlightMap({ record, clockOffset, stale, frozenAt, bookin
     import('maplibre-gl').then(ml=>{
       if (disposed || !container.current) return;
       try {
-        const m = new ml.Map({container: container.current, center: [-122.279,37.873], zoom:14, attributionControl:false, style: { version:8, sources:{carto:{type:'raster',tiles:['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],tileSize:256,attribution:'© OpenStreetMap © CARTO'}},layers:[{id:'basemap',type:'raster',source:'carto',paint:{'raster-saturation':-.65,'raster-contrast':-.08}}]}, maxPitch:60 });
+        const m = new ml.Map({container: container.current, center: [-122.279,37.873], zoom:14, attributionControl:false, style: MAP_STYLE, maxPitch:60 });
         map.current = m; mapInstance=m;
         m.on('load',()=>{
           if(disposed)return; clearTimeout(timer); setReady(true); setFallback(false);
+          // Ambient simulated fleet: faint loop corridors plus drones that never stop flying.
+          m.addSource('fleet-routes',{type:'geojson',data:{type:'FeatureCollection',features:FLEET.map(d=>line(d.path))}});
+          m.addLayer({id:'fleet-routes',type:'line',source:'fleet-routes',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#64748b','line-width':1.5,'line-opacity':.35,'line-dasharray':[1,3]}});
+          const fleet=fleetPositions(Date.now()).map(f=>new ml.Marker({element:fleetMarkerElement(f.id),rotationAlignment:'map'}).setLngLat(f.point).addTo(m));
           m.addSource('route',{type:'geojson',data:line([[0,0],[0,0]])});
           m.addLayer({id:'route-halo',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#fff','line-width':10,'line-opacity':.9}});
           m.addLayer({id:'route-upcoming',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#4f88f5','line-width':4,'line-dasharray':[1.4,1.8],'line-opacity':.72}});
@@ -49,6 +60,7 @@ export default function FlightMap({ record, clockOffset, stale, frozenAt, bookin
             const c=current.current, now=c.stale ? c.frozenAt : Date.now()+c.clockOffset;
             const s=snapshot(c.record,now);
             drone.current?.setLngLat(s.point);
+            fleetPositions(Date.now()).forEach((f,i)=>{const marker=fleet[i];marker.setLngLat(f.point);const g=marker.getElement().querySelector<HTMLElement>('.drone-graphic');if(g)g.style.transform=`rotate(${f.heading}deg)`;});
             heading += (((s.heading-heading+540)%360)-180)*.09;
             const graphic=el.querySelector<HTMLElement>('.drone-graphic');if(graphic)graphic.style.transform=`rotate(${heading}deg)`;
             if(ts-lastRoute>100){
@@ -94,6 +106,6 @@ export default function FlightMap({ record, clockOffset, stale, frozenAt, bookin
     <div className="map-intro"><div className="eyebrow"><span className="location-dot"/> BERKELEY, CALIFORNIA</div><h2>A little less on your to-do list.</h2></div>
     <div className="map-controls"><button title="Zoom in" aria-label="Zoom in" onClick={()=>map.current?.zoomIn()}><Plus size={19}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>map.current?.zoomOut()}><Minus size={19}/></button><span/><button title="Fit entire route" aria-label="Fit entire route" onClick={fit}><Maximize size={18}/></button><button title="Follow drone" aria-label="Follow drone" aria-pressed={follow} className={follow?'active':''} onClick={toggleFollow}><Crosshair size={19}/></button></div>
     <div className="map-view-controls"><button className={cinematic?'selected':''} onClick={toggle3d}><Layers size={16}/>{cinematic?'2D map':'3D view'}</button><button className={follow?'selected':''} onClick={toggleFollow}><Navigation size={15}/>{follow?'Following drone':'Follow drone'}</button></div>
-    <div className="map-attribution"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a> · <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">© CARTO</a></div>
+    <div className="map-attribution">{MAP_ATTRIBUTION.map(([label, href], i) => <span key={href}>{i ? ' · ' : ''}<a href={href} target="_blank" rel="noreferrer">{label}</a></span>)}</div>
   </>;
 }
