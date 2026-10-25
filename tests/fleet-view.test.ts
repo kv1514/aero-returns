@@ -78,3 +78,14 @@ test('a takeoff from the ground away from home is flagged so Fleet asks about pe
   assert.equal(awayOnGround(home, { ...ground, lat: drop[1], lon: drop[0], alt: 25, state: 'HOLD' }), null, 'airborne: nothing takes off');
   assert.equal(awayOnGround(home, null), Infinity, 'no position: ask');
 });
+test('a pad set N m ahead of the nose lands N m away in the heading direction', async () => {
+  const { pointAhead, compass } = await import('../lib/fleet-view');
+  const { distance, bearing } = await import('../lib/simulation');
+  const t = { lat: 37.5042, lon: -121.9644, heading: 87 };
+  for (const m of [2, 5, 10]) {
+    const p = pointAhead(t, m);
+    assert.ok(Math.abs(distance([t.lon, t.lat], p) - m) < 0.05, `${m} m`);
+    assert.ok(Math.abs(bearing([t.lon, t.lat], p) - 87) < 0.5);
+  }
+  assert.deepEqual([0, 44, 90, 180, 271, 359, -90].map(compass), ['N', 'NE', 'E', 'S', 'W', 'N', 'W']);
+});

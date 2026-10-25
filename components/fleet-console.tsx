@@ -5,7 +5,7 @@ import FleetMap from './fleet-map';
 import Modal from './modal';
 import { useAccessibility } from './accessibility';
 import { LIMITS, atPin, fmtMeters, phaseCommand, pickupFor, type DroneConfig } from '@/lib/drone-mission';
-import { ago, awayOnGround, bridgeCommand, dispatchChoices, pickupPreview, serverNow } from '@/lib/fleet-view';
+import { ago, awayOnGround, bridgeCommand, compass, dispatchChoices, pickupPreview, pointAhead, serverNow } from '@/lib/fleet-view';
 import type { LiveTelemetry, MissionPhase, Point, ReturnRecord } from '@/lib/simulation';
 
 type Drone = { id: string; name: string; transport: 'https' | 'sms'; phone: string | null; phoneVerified: boolean; config: DroneConfig; armed: boolean; armedUntil: number; activeReturn: string | null; lastSeen: number; stale: boolean; telemetry: LiveTelemetry | null; createdAt: number };
@@ -146,6 +146,8 @@ export default function FleetConsole() {
               <button disabled={!!mission || busy || pinZone === null || Number(pinZone) === pinRadius}>Save</button>
             </form>
             <div className="fleet-row-buttons">{(['home', 'pickupPad', 'dropPad'] as PadKey[]).map(k => <button key={k} disabled={!t || d.stale || !!mission || busy} onClick={() => void patch({ action: 'pad-from-drone', pad: k }, 'Pad set from the drone’s position.')}><LocateFixed size={14} />{k === 'home' ? 'Home' : k === 'pickupPad' ? 'Pickup' : 'Drop'} = drone</button>)}</div>
+            {(['pickupPad', 'dropPad'] as const).map(k => <div key={k} className="fleet-row-buttons fleet-ahead"><span>{k === 'pickupPad' ? 'Pickup' : 'Drop'} ahead of the nose</span>{[2, 5, 10].map(m => <button key={m} disabled={!t || d.stale || !!mission || busy} onClick={() => t && void patch({ action: 'config', [k]: pointAhead(t, m) }, `${k === 'pickupPad' ? 'Pickup' : 'Drop'} pad set ${m} m ahead of the drone's nose. Re-arm with the checklist.`)}><Navigation size={14} />{m} m</button>)}</div>)}
+            <p className="fleet-hint">{mission ? 'Pads are locked while this drone has a mission. Finish it, or tap ABORT (on the ground ABORT never takes off), then move them.' : t ? `Point the drone's nose where you want it to go (now ${Math.round(t.heading)}° ${compass(t.heading)}). Uses the drone's own GPS and compass.` : 'Waiting for telemetry to set pads from the drone.'}</p>
           </div>
           <div className="fleet-card mission">
             <h3>Mission</h3>
