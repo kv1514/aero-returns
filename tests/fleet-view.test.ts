@@ -108,3 +108,7 @@ test('cruise altitude can go down to the bridge’s 2 m minimum, never below and
   assert.match(configProblem({ ...c, cruiseAlt: 16 })!, /Cruise altitude/);
   assert.match(configProblem({ ...c, maxAlt: 1, cruiseAlt: 1 })!, /Maximum altitude/);
 });
+test('Street View links open Google Maps at the point (lat,lng order)', async () => {
+  const { streetViewUrl } = await import('../lib/fleet-view');
+  assert.equal(streetViewUrl([-122.448821, 37.804262]), 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=37.804262,-122.448821');
+});

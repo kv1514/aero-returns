@@ -1,11 +1,11 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Battery, Check, Copy, Crosshair, Gauge, Home, KeyRound, LocateFixed, MapPin, Navigation, OctagonX, Package, Pause, Plane, PlaneLanding, Plus, Radio, RotateCcw, Satellite, ShieldCheck, Signal, Trash2, TriangleAlert, Undo2, UserRound } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Battery, Eye, Check, Copy, Crosshair, Gauge, Home, KeyRound, LocateFixed, MapPin, Navigation, OctagonX, Package, Pause, Plane, PlaneLanding, Plus, Radio, RotateCcw, Satellite, ShieldCheck, Signal, Trash2, TriangleAlert, Undo2, UserRound } from 'lucide-react';
 import FleetMap from './fleet-map';
 import Modal from './modal';
 import { useAccessibility } from './accessibility';
 import { LIMITS, atPin, fmtMeters, phaseCommand, pickupFor, type DroneConfig } from '@/lib/drone-mission';
-import { ago, awayOnGround, bridgeCommand, compass, dispatchChoices, pickupPreview, pointAhead, pointOffset, serverNow } from '@/lib/fleet-view';
+import { ago, awayOnGround, bridgeCommand, compass, dispatchChoices, pickupPreview, pointAhead, pointOffset, serverNow, streetViewUrl } from '@/lib/fleet-view';
 import { DEMO_PACKAGE, type LiveTelemetry, type MissionPhase, type Point, type ReturnRecord } from '@/lib/simulation';
 
 type Drone = { id: string; name: string; transport: 'https' | 'sms'; phone: string | null; phoneVerified: boolean; config: DroneConfig; armed: boolean; armedUntil: number; activeReturn: string | null; lastSeen: number; stale: boolean; telemetry: LiveTelemetry | null; createdAt: number };
@@ -65,6 +65,15 @@ export default function FleetConsole() {
       say('ok', `Test trip AR-${record.id.slice(0, 8).toUpperCase()} is ready. Check where it flies below, then tap Dispatch live flight.`);
     } catch (e) { say('error', (e as Error).message); }
     finally { setBusy(false); }
+  }
+  /** At the pickup: confirm loading the way the customer's app does (same owner), then launch to the drop pad. */
+  async function loadAndLaunch() {
+    if (!mission || busy) return;
+    setBusy(true);
+    try { await api(`/api/returns/${mission.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'load' }) }); }
+    catch (e) { say('error', (e as Error).message); return; }
+    finally { setBusy(false); }
+    await patch({ action: 'launch' }, 'Package loaded. Launching to the drop pad.');
   }
   async function patch(body: object, success?: string) {
     if (!selected || busy) return false;
@@ -170,6 +179,7 @@ export default function FleetConsole() {
             <div className="fleet-row-buttons">{(['home', 'pickupPad', 'dropPad'] as PadKey[]).map(k => <button key={k} disabled={!t || d.stale || !!mission || busy} onClick={() => void patch({ action: 'pad-from-drone', pad: k }, 'Pad set from the drone’s position.')}><LocateFixed size={14} />{k === 'home' ? 'Home' : k === 'pickupPad' ? 'Pickup' : 'Drop'} = drone</button>)}</div>
             {(['pickupPad', 'dropPad'] as const).map(k => <div key={k} className="fleet-row-buttons fleet-ahead"><span>{k === 'pickupPad' ? 'Pickup' : 'Drop'} ahead of the nose</span>{[2, 5, 10].map(m => <button key={m} disabled={!t || d.stale || !!mission || busy} onClick={() => t && void patch({ action: 'config', [k]: pointAhead(t, m) }, `${k === 'pickupPad' ? 'Pickup' : 'Drop'} pad set ${m} m ahead of the drone's nose. Re-arm with the checklist.`)}><Navigation size={14} />{m} m</button>)}</div>)}
             <div className="fleet-row-buttons fleet-ahead fleet-nudge"><label><span>Nudge</span><select value={nudgePad} onChange={e => setNudgePad(e.target.value as PadKey)} aria-label="Pad to nudge">{(['pickupPad', 'dropPad', 'home'] as PadKey[]).map(k => <option key={k} value={k}>{PAD_NAME[k]}</option>)}</select></label>{([['north', 1, 0, ArrowUp], ['south', -1, 0, ArrowDown], ['west', 0, -1, ArrowLeft], ['east', 0, 1, ArrowRight]] as const).map(([dir, n, e, Icon]) => { const at = d.config[nudgePad]; return <button key={dir} aria-label={`Move the ${PAD_NAME[nudgePad].toLowerCase()} 1 m ${dir}`} title={`1 m ${dir}`} disabled={!at || !!mission || busy} onClick={() => at && void patch({ action: 'config', [nudgePad]: pointOffset(at, n, e) }, `${PAD_NAME[nudgePad]} moved 1 m ${dir}. Re-arm with the checklist.`)}><Icon size={16} /></button>; })}<small>1 m per tap</small></div>
+            <div className="fleet-row-buttons fleet-ahead"><span>Street View</span>{([['Home', d.config.home], ['Pickup', d.config.pickupPad], ['Drop', d.config.dropPad], ['Drone', t ? [t.lon, t.lat] : null]] as const).map(([name, at]) => at && <a key={name} className="fleet-sv" href={streetViewUrl(at as Point)} target="_blank" rel="noreferrer"><Eye size={14} />{name}</a>)}</div>
             <p className="fleet-hint">{mission ? 'Pads are locked while this drone has a mission. Finish it, or tap ABORT (on the ground ABORT never takes off), then move them.' : `Drag Home, Pickup or Drop on the map, nudge them 1 m at a time, or ${t ? `point the drone's nose where you want it to go (now ${Math.round(t.heading)}° ${compass(t.heading)}) and use the ahead buttons.` : 'set them from the drone once its telemetry arrives.'} Moving a pad disarms the drone.`}</p>
           </div>
           <div className="fleet-card mission">
@@ -183,7 +193,7 @@ export default function FleetConsole() {
                 {phase === 'READY_TO_LAUNCH' && <button className="ux-primary" disabled={busy} onClick={() => void patch({ action: 'launch' }, 'Launch sent.')}><Plane size={18} />Area clear · launch</button>}
                 {phase === 'AWAITING_UNLOAD' && <button className="ux-primary" disabled={busy} onClick={() => takeoff({ action: 'unload' }, 'Unload confirmed. Drone heading home.')}><Package size={18} />Unloaded · send home</button>}
                 {mission.live!.fault && <button className="ux-primary" disabled={busy} onClick={() => (phaseCommand(mission.live!, phase!)?.type === 'TAKEOFF' ? takeoff({ action: 'retry' }, 'Step re-sent.') : void patch({ action: 'retry' }, 'Step re-sent.'))}><RotateCcw size={18} />Retry this step</button>}
-                {phase === 'AWAITING_LOAD' && <p className="fleet-hint">The customer confirms loading in their app. You launch after that.</p>}
+                {phase === 'AWAITING_LOAD' && <><button className="ux-primary" disabled={busy} onClick={() => void loadAndLaunch()}><Package size={18} />Package loaded · area clear · fly to drop pad</button><p className="fleet-hint">Confirms the package is on board (the customer can also do this in their app), then launches to the drop pad.</p></>}
               </div>
             </> : <>
               <p className="fleet-hint">Fly one of your active returns with this drone. The drone goes home → the customer’s pin (when pins are on and it is inside the pin zone) or the pickup pad → drop pad → home.</p>

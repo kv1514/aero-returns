@@ -51,3 +51,5 @@ export function pointAhead(t: Pick<LiveTelemetry, 'lat' | 'lon' | 'heading'>, me
 export const pointOffset = ([lon, lat]: Point, north: number, east: number): Point => [lon + east / (111320 * Math.cos(lat * Math.PI / 180)), lat + north / 111320];
 /** Compass word for a heading, e.g. 87 → "E". */
 export const compass = (deg: number) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+/** Google Street View at a point, through the public Maps URLs API (no key needed; opens in Google Maps). */
+export const streetViewUrl = ([lon, lat]: Point) => `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat.toFixed(6)},${lon.toFixed(6)}`;

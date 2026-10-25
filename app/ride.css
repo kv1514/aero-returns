@@ -590,3 +590,7 @@ body[data-motion=true] .match-pulse i{animation:none;opacity:.55;transform:scale
 .fleet-trip{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
 .fleet-trip select{flex:1 1 220px;min-width:0}
 .fleet-trip button{display:inline-flex;align-items:center;gap:6px;min-height:44px;white-space:nowrap}
+/* Fleet map on satellite imagery: leg lengths and Street View links. */
+.fleet-dist{padding:2px 7px;border-radius:10px;background:rgba(0,0,0,.72);color:#fff;font-weight:700;font-size:12px;white-space:nowrap;pointer-events:none}
+.fleet-sv{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:16px;background:var(--ux-soft);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink);text-decoration:none;min-height:40px}
+.fleet-map .maplibregl-ctrl-scale{background:rgba(255,255,255,.85);font-weight:600}

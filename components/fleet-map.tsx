@@ -14,6 +14,13 @@ const circle = ([lng, lat]: Point, meters: number) => {
   return { type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [ring] } };
 };
 const none = { type: 'FeatureCollection' as const, features: [] };
+// Satellite imagery with road and place labels on top (Esri World Imagery; no key needed), so pads are placed against what is really on the ground.
+const esri = (path: string) => `https://server.arcgisonline.com/ArcGIS/rest/services/${path}/MapServer/tile/{z}/{y}/{x}`;
+const SATELLITE = { version: 8 as const, sources: {
+  imagery: { type: 'raster' as const, tiles: [esri('World_Imagery')], tileSize: 256, maxzoom: 19, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' },
+  roads: { type: 'raster' as const, tiles: [esri('Reference/World_Transportation')], tileSize: 256, maxzoom: 19 },
+  places: { type: 'raster' as const, tiles: [esri('Reference/World_Boundaries_and_Places')], tileSize: 256, maxzoom: 19 } },
+  layers: [{ id: 'imagery', type: 'raster' as const, source: 'imagery' }, { id: 'roads', type: 'raster' as const, source: 'roads', paint: { 'raster-opacity': .8 } }, { id: 'places', type: 'raster' as const, source: 'places' }] };
 const line = (coordinates: number[][]) => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: coordinates.length > 1 ? coordinates : [[0, 0], [0, 0]] } });
 const pin = (kind: string, text: string) => { const el = document.createElement('div'); el.className = `fleet-pin ${kind}`; el.innerHTML = '<i></i><span></span>'; el.querySelector('span')!.textContent = text; return el; };
 
@@ -29,6 +36,11 @@ export default function FleetMap({ config, telemetry, trail, customerPin = null,
     (m.getSource('fence') as GeoJSONSource).setData(circle(c.home, c.radius));
     (m.getSource('pinzone') as GeoJSONSource).setData(c.pickupPad && (c.pinRadius ?? 0) > 0 ? circle(c.pickupPad, c.pinRadius!) : none);
     (m.getSource('trail') as GeoJSONSource).setData(line(tr.map(p => [p.lon, p.lat])));
+    // Every leg the drone flies, plus drone → pickup, with its length at the midpoint.
+    const drone: Point | null = t ? [t.lon, t.lat] : null;
+    const all: [string, Point | null, Point | null][] = [['hp', c.home, c.pickupPad], ['pd', c.pickupPad, c.dropPad], ['dh', c.dropPad, c.home], ['xp', drone, c.pickupPad]];
+    const legs = all.filter((g): g is [string, Point, Point] => !!g[1] && !!g[2]);
+    (m.getSource('legs') as GeoJSONSource).setData({ type: 'FeatureCollection', features: legs.map(([, a, b]) => line([a, b])) });
     import('maplibre-gl').then(ml => {
       const place = (key: string, point: Point | null, kind: string, label: string) => {
         if (!point) { markers.current[key]?.remove(); delete markers.current[key]; return; }
@@ -56,6 +68,13 @@ export default function FleetMap({ config, telemetry, trail, customerPin = null,
       };
       place('home', c.home, 'home', 'Home'); place('pickup', c.pickupPad, 'pad', 'Pickup pad'); place('drop', c.dropPad, 'pad drop', 'Drop pad'); place('customer', pinPoint, 'pad customer', 'Customer pin');
       place('drone', t ? [t.lon, t.lat] : null, 'drone', `${Math.round(t?.alt ?? 0)} m`);
+      for (const id of ['hp', 'pd', 'dh', 'xp']) {
+        const leg = legs.find(g => g[0] === id), key = `leg-${id}`;
+        if (!leg) { markers.current[key]?.remove(); delete markers.current[key]; continue; }
+        const [, a, b] = leg, mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], text = `${id === 'xp' ? 'drone ' : ''}${near(distance(a, b))}`;
+        if (!markers.current[key]) { const el = document.createElement('div'); el.className = 'fleet-dist'; markers.current[key] = new ml.Marker({ element: el, anchor: 'center' }).setLngLat(mid).addTo(m); }
+        markers.current[key].setLngLat(mid); markers.current[key].getElement().textContent = text;
+      }
       const arrow = markers.current.drone?.getElement().querySelector('i') as HTMLElement | null; if (arrow && t) arrow.style.transform = `rotate(${t.heading}deg)`;
     });
   }
@@ -64,21 +83,27 @@ export default function FleetMap({ config, telemetry, trail, customerPin = null,
     import('maplibre-gl').then(ml => {
       if (disposed || !container.current) return;
       // app/fleet/fleet.css lifts the attribution above the Home/Pickup/Drop bar along the bottom of the card.
-      const m = new ml.Map({ container: container.current, style: 'https://tiles.openfreemap.org/styles/positron', center: latest.current.config.home, zoom: 16, attributionControl: { compact: true } });
+      const m = new ml.Map({ container: container.current, style: SATELLITE, center: latest.current.config.home, zoom: 16, maxZoom: 21, attributionControl: { compact: true } });
+      m.addControl(new ml.ScaleControl({ maxWidth: 110, unit: 'metric' }), 'top-left');
       map.current = m;
       m.once('style.load', () => {
         m.addSource('fence', { type: 'geojson', data: circle(latest.current.config.home, latest.current.config.radius) });
         m.addLayer({ id: 'fence-fill', type: 'fill', source: 'fence', paint: { 'fill-color': '#06c167', 'fill-opacity': .07 } });
-        m.addLayer({ id: 'fence-line', type: 'line', source: 'fence', paint: { 'line-color': '#06a35a', 'line-width': 2, 'line-dasharray': [2, 2] } });
+        m.addLayer({ id: 'fence-line', type: 'line', source: 'fence', paint: { 'line-color': '#3cf08a', 'line-width': 2, 'line-dasharray': [2, 2] } });
         m.addSource('pinzone', { type: 'geojson', data: none });
         m.addLayer({ id: 'pinzone-fill', type: 'fill', source: 'pinzone', paint: { 'fill-color': '#ff6937', 'fill-opacity': .08 } });
         m.addLayer({ id: 'pinzone-line', type: 'line', source: 'pinzone', paint: { 'line-color': '#e0521f', 'line-width': 1.5, 'line-dasharray': [1, 2] } });
         m.addSource('trail', { type: 'geojson', data: line([]) });
-        m.addLayer({ id: 'trail', type: 'line', source: 'trail', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#000', 'line-width': 3, 'line-opacity': .7 } });
+        m.addLayer({ id: 'trail', type: 'line', source: 'trail', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffd400', 'line-width': 3, 'line-opacity': .9 } });
+        m.addSource('legs', { type: 'geojson', data: none });
+        m.addLayer({ id: 'legs-casing', type: 'line', source: 'legs', paint: { 'line-color': '#000', 'line-width': 4, 'line-opacity': .45 } });
+        m.addLayer({ id: 'legs', type: 'line', source: 'legs', paint: { 'line-color': '#fff', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
         ready.current = true; draw();
         const c = latest.current.config, pts = [c.home, c.pickupPad, c.dropPad].filter(Boolean) as Point[];
         const r = c.radius / 111000;
-        m.fitBounds([[c.home[0] - r * 1.3, c.home[1] - r], [c.home[0] + r * 1.3, c.home[1] + r]], { padding: 30, duration: 0, maxZoom: pts.length > 1 ? 18 : 17 });
+        // Open on the pads (zoomed in close for short test hops); with no pads yet, show the whole geofence.
+        if (pts.length > 1) m.fitBounds([[Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1]))], [Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1]))]], { padding: 70, duration: 0, maxZoom: 20 });
+        else m.fitBounds([[c.home[0] - r * 1.3, c.home[1] - r], [c.home[0] + r * 1.3, c.home[1] + r]], { padding: 30, duration: 0, maxZoom: 17 });
       });
       m.on('click', e => { if (latest.current.placing) latest.current.onPlace([e.lngLat.lng, e.lngLat.lat]); });
     });
