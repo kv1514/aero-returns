@@ -1,11 +1,14 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import type { Map as MapLibreMap, GeoJSONSource, Marker } from 'maplibre-gl';
-import type { DroneConfig } from '@/lib/drone-mission';
-import type { LiveTelemetry, Point } from '@/lib/simulation';
+import { fmtMeters, type DroneConfig } from '@/lib/drone-mission';
+import { distance, type LiveTelemetry, type Point } from '@/lib/simulation';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-type Props = { config: DroneConfig; telemetry: LiveTelemetry | null; trail: LiveTelemetry[]; customerPin?: Point | null; placing: string | null; onPlace: (p: Point) => void };
+export type PadKey = 'home' | 'pickupPad' | 'dropPad';
+type Props = { config: DroneConfig; telemetry: LiveTelemetry | null; trail: LiveTelemetry[]; customerPin?: Point | null; placing: string | null; onPlace: (p: Point) => void; editable?: boolean; onMove?: (pad: PadKey, p: Point) => Promise<boolean> };
+const PAD_OF: Record<string, PadKey> = { home: 'home', pickup: 'pickupPad', drop: 'dropPad' };
+const near = (m: number) => m < 10 ? `${m.toFixed(1)} m` : fmtMeters(m);
 const circle = ([lng, lat]: Point, meters: number) => {
   const ring = Array.from({ length: 65 }, (_, i) => { const a = (i / 64) * 2 * Math.PI; return [lng + (meters / (111320 * Math.cos(lat * Math.PI / 180))) * Math.cos(a), lat + (meters / 110540) * Math.sin(a)]; });
   return { type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [ring] } };
@@ -15,9 +18,11 @@ const line = (coordinates: number[][]) => ({ type: 'Feature' as const, propertie
 const pin = (kind: string, text: string) => { const el = document.createElement('div'); el.className = `fleet-pin ${kind}`; el.innerHTML = '<i></i><span></span>'; el.querySelector('span')!.textContent = text; return el; };
 
 /** Operator map: geofence, the pin zone around the pickup pad, home and pads, live drone position and recent track. */
-export default function FleetMap({ config, telemetry, trail, customerPin = null, placing, onPlace }: Props) {
+export default function FleetMap({ config, telemetry, trail, customerPin = null, placing, onPlace, editable = false, onMove }: Props) {
   const container = useRef<HTMLDivElement>(null), map = useRef<MapLibreMap | null>(null), markers = useRef<Record<string, Marker>>({}), ready = useRef(false);
-  const latest = useRef({ config, telemetry, trail, customerPin, placing, onPlace });
+  // A pad being dragged, or dropped and waiting for the server, keeps its spot instead of snapping back on the next telemetry refresh.
+  const dragging = useRef<string | null>(null), held = useRef<Record<string, Point>>({});
+  const latest = useRef({ config, telemetry, trail, customerPin, placing, onPlace, editable, onMove });
   function draw() {
     const m = map.current; if (!m || !ready.current) return;
     const { config: c, telemetry: t, trail: tr, customerPin: pinPoint } = latest.current;
@@ -27,9 +32,27 @@ export default function FleetMap({ config, telemetry, trail, customerPin = null,
     import('maplibre-gl').then(ml => {
       const place = (key: string, point: Point | null, kind: string, label: string) => {
         if (!point) { markers.current[key]?.remove(); delete markers.current[key]; return; }
-        markers.current[key] ??= new ml.Marker({ element: pin(kind, label), anchor: 'center' }).setLngLat(point).addTo(m);
-        markers.current[key].setLngLat(point);
-        markers.current[key].getElement().querySelector('span')!.textContent = label;
+        if (!markers.current[key]) {
+          const mk = new ml.Marker({ element: pin(kind, label), anchor: 'center' }).setLngLat(point).addTo(m), pad = PAD_OF[key];
+          if (pad) {
+            const span = mk.getElement().querySelector('span')!;
+            let start: Point = point;
+            mk.on('dragstart', () => { dragging.current = key; const { lng, lat } = mk.getLngLat(); start = [lng, lat]; });
+            // While dragging, the label shows how far the pad is from the drone, or how far it has moved with no telemetry.
+            mk.on('drag', () => { const { lng, lat } = mk.getLngLat(), tel = latest.current.telemetry; span.textContent = tel ? `${near(distance([tel.lon, tel.lat], [lng, lat]))} from drone` : `moved ${near(distance(start, [lng, lat]))}`; });
+            mk.on('dragend', () => {
+              const { lng, lat } = mk.getLngLat(), p: Point = [lng, lat]; dragging.current = null; held.current[key] = p;
+              // On success the pad stays where it was dropped; a refusal (e.g. outside the geofence) puts it back.
+              void Promise.resolve(latest.current.onMove?.(pad, p)).then(ok => ok === false ? latest.current.config[pad] ?? p : p, () => latest.current.config[pad] ?? p).then(at => { delete held.current[key]; mk.setLngLat(at); span.textContent = label; });
+            });
+          }
+          markers.current[key] = mk;
+        }
+        const mk = markers.current[key];
+        if (PAD_OF[key]) mk.setDraggable(!!latest.current.editable && !!latest.current.onMove);
+        if (dragging.current === key) return;
+        mk.setLngLat(held.current[key] ?? point);
+        mk.getElement().querySelector('span')!.textContent = label;
       };
       place('home', c.home, 'home', 'Home'); place('pickup', c.pickupPad, 'pad', 'Pickup pad'); place('drop', c.dropPad, 'pad drop', 'Drop pad'); place('customer', pinPoint, 'pad customer', 'Customer pin');
       place('drone', t ? [t.lon, t.lat] : null, 'drone', `${Math.round(t?.alt ?? 0)} m`);
@@ -61,6 +84,6 @@ export default function FleetMap({ config, telemetry, trail, customerPin = null,
     });
     return () => { disposed = true; ready.current = false; Object.values(markers.current).forEach(m => m.remove()); markers.current = {}; map.current?.remove(); map.current = null; };
   }, []);
-  useEffect(() => { latest.current = { config, telemetry, trail, customerPin, placing, onPlace }; draw(); });
-  return <div ref={container} className={`fleet-map ${placing ? 'placing' : ''}`} aria-label="Drone map with geofence, pin zone, pads and live position" />;
+  useEffect(() => { latest.current = { config, telemetry, trail, customerPin, placing, onPlace, editable, onMove }; draw(); });
+  return <div ref={container} className={`fleet-map ${placing ? 'placing' : ''} ${editable && onMove ? 'editable' : ''}`} aria-label="Drone map with geofence, pin zone, pads and live position" />;
 }

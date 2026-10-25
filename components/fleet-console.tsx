@@ -1,11 +1,11 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Battery, Check, Copy, Crosshair, Gauge, Home, KeyRound, LocateFixed, MapPin, Navigation, OctagonX, Package, Pause, Plane, PlaneLanding, Plus, Radio, RotateCcw, Satellite, ShieldCheck, Signal, Trash2, TriangleAlert, Undo2, UserRound } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Battery, Check, Copy, Crosshair, Gauge, Home, KeyRound, LocateFixed, MapPin, Navigation, OctagonX, Package, Pause, Plane, PlaneLanding, Plus, Radio, RotateCcw, Satellite, ShieldCheck, Signal, Trash2, TriangleAlert, Undo2, UserRound } from 'lucide-react';
 import FleetMap from './fleet-map';
 import Modal from './modal';
 import { useAccessibility } from './accessibility';
 import { LIMITS, atPin, fmtMeters, phaseCommand, pickupFor, type DroneConfig } from '@/lib/drone-mission';
-import { ago, awayOnGround, bridgeCommand, compass, dispatchChoices, pickupPreview, pointAhead, serverNow } from '@/lib/fleet-view';
+import { ago, awayOnGround, bridgeCommand, compass, dispatchChoices, pickupPreview, pointAhead, pointOffset, serverNow } from '@/lib/fleet-view';
 import type { LiveTelemetry, MissionPhase, Point, ReturnRecord } from '@/lib/simulation';
 
 type Drone = { id: string; name: string; transport: 'https' | 'sms'; phone: string | null; phoneVerified: boolean; config: DroneConfig; armed: boolean; armedUntil: number; activeReturn: string | null; lastSeen: number; stale: boolean; telemetry: LiveTelemetry | null; createdAt: number };
@@ -13,6 +13,7 @@ type Setup = { link: boolean; sms: boolean; linkUrl: string; smsWebhook: string 
 type Command = { seq: number; type: string; status: string; reason: string | null; phase: string | null; created_at: number; updated_at: number };
 type Detail = { setup: Setup; drone: Drone; key?: string; trail: LiveTelemetry[]; commands: Command[]; mission: ReturnRecord | null; now: number };
 type PadKey = 'home' | 'pickupPad' | 'dropPad';
+const PAD_NAME: Record<PadKey, string> = { home: 'Home', pickupPad: 'Pickup pad', dropPad: 'Drop pad' };
 const PHASE: Record<MissionPhase, string> = { TAKEOFF_OUT: 'Taking off', TO_PICKUP: 'Flying to pickup', HOVER_PICKUP: "Hovering over the customer's pin · check the landing area", LAND_PICKUP: 'Landing at pickup', AWAITING_LOAD: 'Waiting for the customer to load', READY_TO_LAUNCH: 'Loaded · ready to launch', TAKEOFF_LOADED: 'Taking off with package', TO_DROP: 'Flying to drop pad', LAND_DROP: 'Landing at drop pad', AWAITING_UNLOAD: 'Landed · confirm unload', TAKEOFF_HOME: 'Taking off for home', RETURNING: 'Flying home', LAND_HOME: 'Landing at home', COMPLETE: 'Complete', ABORTED: 'Ended by operator' };
 const CHECKS = [['pilot', 'A pilot with RC override is ready and watching the drone.'], ['airspace', 'The area is clear and the flight is authorized (Part 107/TRUST, LAANC if needed).'], ['pads', 'Home, pads and geofence on the map match the real site.'], ['failsafe', 'Autopilot failsafes are set: RTL on link loss, geofence, low battery.']] as const;
 const fmtPoint = (p: Point | null) => (p ? `${p[1].toFixed(6)}, ${p[0].toFixed(6)}` : 'Not set');
@@ -28,7 +29,7 @@ export default function FleetConsole() {
   useAccessibility();
   const [list, setList] = useState<{ setup: Setup; drones: Drone[] } | null>(null), [selected, setSelected] = useState<string | null>(null), [detail, setDetail] = useState<Detail | null>(null);
   const [returns, setReturns] = useState<ReturnRecord[]>([]), [returnId, setReturnId] = useState(''), [registering, setRegistering] = useState(false), [secret, setSecret] = useState<{ drone: Drone; key: string } | null>(null);
-  const [placing, setPlacing] = useState<PadKey | null>(null), [busy, setBusy] = useState(false), [notice, setNotice] = useState<{ tone: 'error' | 'ok'; text: string } | null>(null), [checks, setChecks] = useState<Record<string, boolean>>({}), [confirmDelete, setConfirmDelete] = useState(false);
+  const [placing, setPlacing] = useState<PadKey | null>(null), [nudgePad, setNudgePad] = useState<PadKey>('pickupPad'), [busy, setBusy] = useState(false), [notice, setNotice] = useState<{ tone: 'error' | 'ok'; text: string } | null>(null), [checks, setChecks] = useState<Record<string, boolean>>({}), [confirmDelete, setConfirmDelete] = useState(false);
   // pinZone: the pin landing zone being typed (null shows the saved value); askClear: a takeoff from the ground away from home waiting for the operator's yes.
   const [confirmRotate, setConfirmRotate] = useState(false), [pinZone, setPinZone] = useState<string | null>(null), [askClear, setAskClear] = useState<{ body: object; success: string } | null>(null);
   const say = (tone: 'error' | 'ok', text: string) => setNotice({ tone, text });
@@ -129,7 +130,7 @@ export default function FleetConsole() {
         {noticeBox}
         <div className="fleet-grid">
           <div className="fleet-card map-card">
-            <FleetMap config={d.config} telemetry={t} trail={current?.trail ?? []} customerPin={mission?.live?.pickupSource === 'pin' ? mission.live.pickupPad : !mission && chosenPickup?.source === 'pin' ? chosenPickup.point : null} placing={placing} onPlace={p => { const pad = placing!; setPlacing(null); void patch({ action: 'config', [pad]: p }, 'Pad updated. Re-arm with the checklist.'); }} />
+            <FleetMap config={d.config} telemetry={t} trail={current?.trail ?? []} customerPin={mission?.live?.pickupSource === 'pin' ? mission.live.pickupPad : !mission && chosenPickup?.source === 'pin' ? chosenPickup.point : null} placing={placing} onPlace={p => { const pad = placing!; setPlacing(null); void patch({ action: 'config', [pad]: p }, 'Pad updated. Re-arm with the checklist.'); }} editable={!mission && !busy && !placing} onMove={(pad, p) => patch({ action: 'config', [pad]: p }, `${PAD_NAME[pad]} moved. Re-arm with the checklist.`)} />
             <div className="fleet-place">{placing ? <><span>Click the map to place the {placing === 'home' ? 'home point' : placing === 'pickupPad' ? 'pickup pad' : 'drop pad'}.</span><button onClick={() => setPlacing(null)}>Cancel</button></> : <>{(['home', 'pickupPad', 'dropPad'] as PadKey[]).map(k => <button key={k} disabled={!!mission || busy} onClick={() => setPlacing(k)}>{k === 'home' ? <Home size={14} /> : <MapPin size={14} />}{k === 'home' ? 'Home' : k === 'pickupPad' ? 'Pickup' : 'Drop'}</button>)}</>}</div>
           </div>
           <div className="fleet-card telemetry">
@@ -147,7 +148,8 @@ export default function FleetConsole() {
             </form>
             <div className="fleet-row-buttons">{(['home', 'pickupPad', 'dropPad'] as PadKey[]).map(k => <button key={k} disabled={!t || d.stale || !!mission || busy} onClick={() => void patch({ action: 'pad-from-drone', pad: k }, 'Pad set from the drone’s position.')}><LocateFixed size={14} />{k === 'home' ? 'Home' : k === 'pickupPad' ? 'Pickup' : 'Drop'} = drone</button>)}</div>
             {(['pickupPad', 'dropPad'] as const).map(k => <div key={k} className="fleet-row-buttons fleet-ahead"><span>{k === 'pickupPad' ? 'Pickup' : 'Drop'} ahead of the nose</span>{[2, 5, 10].map(m => <button key={m} disabled={!t || d.stale || !!mission || busy} onClick={() => t && void patch({ action: 'config', [k]: pointAhead(t, m) }, `${k === 'pickupPad' ? 'Pickup' : 'Drop'} pad set ${m} m ahead of the drone's nose. Re-arm with the checklist.`)}><Navigation size={14} />{m} m</button>)}</div>)}
-            <p className="fleet-hint">{mission ? 'Pads are locked while this drone has a mission. Finish it, or tap ABORT (on the ground ABORT never takes off), then move them.' : t ? `Point the drone's nose where you want it to go (now ${Math.round(t.heading)}° ${compass(t.heading)}). Uses the drone's own GPS and compass.` : 'Waiting for telemetry to set pads from the drone.'}</p>
+            <div className="fleet-row-buttons fleet-ahead fleet-nudge"><label><span>Nudge</span><select value={nudgePad} onChange={e => setNudgePad(e.target.value as PadKey)} aria-label="Pad to nudge">{(['pickupPad', 'dropPad', 'home'] as PadKey[]).map(k => <option key={k} value={k}>{PAD_NAME[k]}</option>)}</select></label>{([['north', 1, 0, ArrowUp], ['south', -1, 0, ArrowDown], ['west', 0, -1, ArrowLeft], ['east', 0, 1, ArrowRight]] as const).map(([dir, n, e, Icon]) => { const at = d.config[nudgePad]; return <button key={dir} aria-label={`Move the ${PAD_NAME[nudgePad].toLowerCase()} 1 m ${dir}`} title={`1 m ${dir}`} disabled={!at || !!mission || busy} onClick={() => at && void patch({ action: 'config', [nudgePad]: pointOffset(at, n, e) }, `${PAD_NAME[nudgePad]} moved 1 m ${dir}. Re-arm with the checklist.`)}><Icon size={16} /></button>; })}<small>1 m per tap</small></div>
+            <p className="fleet-hint">{mission ? 'Pads are locked while this drone has a mission. Finish it, or tap ABORT (on the ground ABORT never takes off), then move them.' : `Drag Home, Pickup or Drop on the map, nudge them 1 m at a time, or ${t ? `point the drone's nose where you want it to go (now ${Math.round(t.heading)}° ${compass(t.heading)}) and use the ahead buttons.` : 'set them from the drone once its telemetry arrives.'} Moving a pad disarms the drone.`}</p>
           </div>
           <div className="fleet-card mission">
             <h3>Mission</h3>

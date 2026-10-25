@@ -581,3 +581,8 @@ body[data-motion=true] .match-pulse i{animation:none;opacity:.55;transform:scale
 .fleet-ahead{align-items:center;margin-top:8px}
 .fleet-ahead>span{min-width:150px;font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
 .fleet-ahead button{min-height:40px}
+.fleet-nudge label{display:inline-flex;align-items:center;gap:8px;min-width:150px}
+.fleet-nudge select{min-height:40px;padding:0 10px;border-radius:12px;border:1px solid var(--ux-line,#e8e8e8);background:var(--ux-bg);color:var(--ux-ink);font-weight:600}
+.fleet-nudge button{min-width:44px;justify-content:center}
+.fleet-nudge small{color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1))}
+.fleet-map.editable .fleet-pin.home,.fleet-map.editable .fleet-pin.pad:not(.customer){cursor:grab}

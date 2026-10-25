@@ -44,8 +44,10 @@ export function awayOnGround(home: Point, t: LiveTelemetry | null): number | nul
 }
 /** The point `meters` ahead of the drone's nose ([lon, lat]), from its own GPS and compass, for placing a pad a few meters away. */
 export function pointAhead(t: Pick<LiveTelemetry, 'lat' | 'lon' | 'heading'>, meters: number): Point {
-  const h = t.heading * Math.PI / 180, north = Math.cos(h) * meters, east = Math.sin(h) * meters;
-  return [t.lon + east / (111320 * Math.cos(t.lat * Math.PI / 180)), t.lat + north / 111320];
+  const h = t.heading * Math.PI / 180;
+  return pointOffset([t.lon, t.lat], Math.cos(h) * meters, Math.sin(h) * meters);
 }
+/** `p` moved `north` and `east` meters (negative for south and west), for nudging a pad. */
+export const pointOffset = ([lon, lat]: Point, north: number, east: number): Point => [lon + east / (111320 * Math.cos(lat * Math.PI / 180)), lat + north / 111320];
 /** Compass word for a heading, e.g. 87 → "E". */
 export const compass = (deg: number) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(((deg % 360) + 360) % 360 / 45) % 8];

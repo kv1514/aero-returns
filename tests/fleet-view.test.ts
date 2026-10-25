@@ -89,3 +89,13 @@ test('a pad set N m ahead of the nose lands N m away in the heading direction', 
   }
   assert.deepEqual([0, 44, 90, 180, 271, 359, -90].map(compass), ['N', 'NE', 'E', 'S', 'W', 'N', 'W']);
 });
+test('nudging a pad moves it 1 m in the chosen compass direction', async () => {
+  const { pointOffset } = await import('../lib/fleet-view');
+  const { distance, bearing } = await import('../lib/simulation');
+  const p: Point = [-122.2595, 37.8719];
+  for (const [n, e, dir] of [[1, 0, 0], [0, 1, 90], [-1, 0, 180], [0, -1, 270]] as const) {
+    const q = pointOffset(p, n, e);
+    assert.ok(Math.abs(distance(p, q) - 1) < 0.01);
+    assert.ok(Math.abs(((bearing(p, q) - dir + 540) % 360) - 180) < 0.5);
+  }
+});
