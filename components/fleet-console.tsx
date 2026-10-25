@@ -6,7 +6,7 @@ import Modal from './modal';
 import { useAccessibility } from './accessibility';
 import { LIMITS, atPin, fmtMeters, phaseCommand, pickupFor, type DroneConfig } from '@/lib/drone-mission';
 import { ago, awayOnGround, bridgeCommand, compass, dispatchChoices, pickupPreview, pointAhead, pointOffset, serverNow } from '@/lib/fleet-view';
-import type { LiveTelemetry, MissionPhase, Point, ReturnRecord } from '@/lib/simulation';
+import { DEMO_PACKAGE, type LiveTelemetry, type MissionPhase, type Point, type ReturnRecord } from '@/lib/simulation';
 
 type Drone = { id: string; name: string; transport: 'https' | 'sms'; phone: string | null; phoneVerified: boolean; config: DroneConfig; armed: boolean; armedUntil: number; activeReturn: string | null; lastSeen: number; stale: boolean; telemetry: LiveTelemetry | null; createdAt: number };
 type Setup = { link: boolean; sms: boolean; linkUrl: string; smsWebhook: string };
@@ -55,6 +55,17 @@ export default function FleetConsole() {
     const fast = setInterval(() => loadDetail().catch(() => {}), 1500), slow = setInterval(loadReturns, 6000);
     return () => { active = false; clearInterval(fast); clearInterval(slow); };
   }, [selected, receive]);
+  /** Books a demo return for this browser and selects it, so a test flight needs no trip through the customer app. Dispatch stays a separate tap. */
+  async function newTrip() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { record } = await api<{ record: ReturnRecord }>('/api/returns', { method: 'POST', body: JSON.stringify({ ...DEMO_PACKAGE, returnReference: 'Fleet test trip' }) });
+      setReturns(rs => [record, ...rs.filter(r => r.id !== record.id)]); setReturnId(record.id);
+      say('ok', `Test trip AR-${record.id.slice(0, 8).toUpperCase()} is ready. Check where it flies below, then tap Dispatch live flight.`);
+    } catch (e) { say('error', (e as Error).message); }
+    finally { setBusy(false); }
+  }
   async function patch(body: object, success?: string) {
     if (!selected || busy) return false;
     setBusy(true);
@@ -166,11 +177,11 @@ export default function FleetConsole() {
               </div>
             </> : <>
               <p className="fleet-hint">Fly one of your active returns with this drone. The drone goes home → the customer’s pin (when pins are on and it is inside the pin zone) or the pickup pad → drop pad → home.</p>
-              <select value={chosen?.id ?? ''} onChange={e => setReturnId(e.target.value)} aria-label="Return to dispatch"><option value="">Choose a return…</option>{ready.map(r => <option key={r.id} value={r.id}>{returnLabel(r)}</option>)}{held.map(r => <option key={r.id} value={r.id} disabled>{returnLabel(r)} · waiting for a person</option>)}</select>
+              <div className="fleet-trip"><select value={chosen?.id ?? ''} onChange={e => setReturnId(e.target.value)} aria-label="Return to dispatch"><option value="">Choose a return…</option>{ready.map(r => <option key={r.id} value={r.id}>{returnLabel(r)}</option>)}{held.map(r => <option key={r.id} value={r.id} disabled>{returnLabel(r)} · waiting for a person</option>)}</select><button className="secondary" disabled={busy} onClick={() => void newTrip()}><Plus size={16} />New test trip</button></div>
               {held.length > 0 && <p className="fleet-hint fleet-landing"><UserRound size={14} /><span>{held.length === 1 ? '1 return is' : `${held.length} returns are`} waiting for a person, so {held.length === 1 ? 'it' : 'they'} can’t fly yet. Approve or decline on the <a href="/merchant">merchant desk</a> first.</span></p>}
               {chosenPickup && <p className={`fleet-hint fleet-landing ${chosenPickup.source}`}><MapPin size={14} /><span>{pickupPreview(chosenPickup)}</span></p>}
               <button className="ux-primary" disabled={!chosen || !chosenPickup?.point || busy} onClick={() => { if (chosen && chosenPickup?.point) takeoff({ action: 'dispatch', returnId: chosen.id, pickup: { source: chosenPickup.source, point: chosenPickup.point } }, 'Dispatched. Takeoff command sent.'); }}><Plane size={18} />Dispatch live flight</button>
-              {!ready.length && !held.length && <p className="fleet-hint">No unloaded active returns. <a href="/">Book one in the customer app</a>.</p>}
+              {!ready.length && !held.length && <p className="fleet-hint">No unloaded active returns. Tap New test trip, or <a href="/">book one in the customer app</a>.</p>}
             </>}
           </div>
           <div className="fleet-card safety">

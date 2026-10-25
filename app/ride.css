@@ -586,3 +586,7 @@ body[data-motion=true] .match-pulse i{animation:none;opacity:.55;transform:scale
 .fleet-nudge button{min-width:44px;justify-content:center}
 .fleet-nudge small{color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1))}
 .fleet-map.editable .fleet-pin.home,.fleet-map.editable .fleet-pin.pad:not(.customer){cursor:grab}
+/* Fleet: the return picker and a one-tap test trip side by side. */
+.fleet-trip{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
+.fleet-trip select{flex:1 1 220px;min-width:0}
+.fleet-trip button{display:inline-flex;align-items:center;gap:6px;min-height:44px;white-space:nowrap}
