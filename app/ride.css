@@ -594,3 +594,10 @@ body[data-motion=true] .match-pulse i{animation:none;opacity:.55;transform:scale
 .fleet-dist{padding:2px 7px;border-radius:10px;background:rgba(0,0,0,.72);color:#fff;font-weight:700;font-size:12px;white-space:nowrap;pointer-events:none}
 .fleet-sv{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:16px;background:var(--ux-soft);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink);text-decoration:none;min-height:40px}
 .fleet-map .maplibregl-ctrl-scale{background:rgba(255,255,255,.85);font-weight:600}
+/* Fleet: flight-plan analysis. */
+.fleet-plan{margin:12px 0;padding:12px 14px;border-radius:14px;background:var(--ux-soft)}
+.fleet-plan h4{margin:0 0 6px;font-size:calc(15px * var(--font-scale,1));color:var(--ux-ink)}
+.fleet-plan h4 small{display:block;font-weight:500;color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1))}
+.fleet-plan ol{margin:0 0 6px;padding:0;list-style:none}
+.fleet-plan li{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--ux-line,#e8e8e8);font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
+.fleet-plan li span:last-child{color:var(--ux-muted);font-variant-numeric:tabular-nums}

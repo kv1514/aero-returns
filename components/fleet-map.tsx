@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import type { Map as MapLibreMap, GeoJSONSource, Marker } from 'maplibre-gl';
 import { fmtMeters, type DroneConfig } from '@/lib/drone-mission';
 import { distance, type LiveTelemetry, type Point } from '@/lib/simulation';
+import { flightPlan } from '@/lib/fleet-view';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 export type PadKey = 'home' | 'pickupPad' | 'dropPad';
@@ -41,6 +42,9 @@ export default function FleetMap({ config, telemetry, trail, customerPin = null,
     const all: [string, Point | null, Point | null][] = [['hp', c.home, c.pickupPad], ['pd', c.pickupPad, c.dropPad], ['dh', c.dropPad, c.home], ['xp', drone, c.pickupPad]];
     const legs = all.filter((g): g is [string, Point, Point] => !!g[1] && !!g[2]);
     (m.getSource('legs') as GeoJSONSource).setData({ type: 'FeatureCollection', features: legs.map(([, a, b]) => line([a, b])) });
+    const plan = flightPlan(c);
+    (m.getSource('corridor') as GeoJSONSource).setData(plan ? { type: 'FeatureCollection', features: plan.corridor.map(r => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [r] } })) } : none);
+    (m.getSource('escape') as GeoJSONSource).setData(plan ? { type: 'FeatureCollection', features: plan.escapes.map(([a, b]) => line([a, b])) } : none);
     import('maplibre-gl').then(ml => {
       const place = (key: string, point: Point | null, kind: string, label: string) => {
         if (!point) { markers.current[key]?.remove(); delete markers.current[key]; return; }
@@ -95,6 +99,12 @@ export default function FleetMap({ config, telemetry, trail, customerPin = null,
         m.addLayer({ id: 'pinzone-line', type: 'line', source: 'pinzone', paint: { 'line-color': '#e0521f', 'line-width': 1.5, 'line-dasharray': [1, 2] } });
         m.addSource('trail', { type: 'geojson', data: line([]) });
         m.addLayer({ id: 'trail', type: 'line', source: 'trail', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffd400', 'line-width': 3, 'line-opacity': .9 } });
+        // Flight-plan analysis under the legs: the ±GPS-error corridor and landing circles, and the emergency return path.
+        m.addSource('corridor', { type: 'geojson', data: none });
+        m.addLayer({ id: 'corridor-fill', type: 'fill', source: 'corridor', paint: { 'fill-color': '#ffffff', 'fill-opacity': .16 } });
+        m.addLayer({ id: 'corridor-line', type: 'line', source: 'corridor', paint: { 'line-color': '#ffffff', 'line-width': 1, 'line-opacity': .55 } });
+        m.addSource('escape', { type: 'geojson', data: none });
+        m.addLayer({ id: 'escape', type: 'line', source: 'escape', paint: { 'line-color': '#ff4d4d', 'line-width': 2.5, 'line-dasharray': [1.5, 1.5] } });
         m.addSource('legs', { type: 'geojson', data: none });
         m.addLayer({ id: 'legs-casing', type: 'line', source: 'legs', paint: { 'line-color': '#000', 'line-width': 4, 'line-opacity': .45 } });
         m.addLayer({ id: 'legs', type: 'line', source: 'legs', paint: { 'line-color': '#fff', 'line-width': 2, 'line-dasharray': [2, 1.5] } });

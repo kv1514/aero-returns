@@ -1,6 +1,6 @@
 /** Pure, client-safe helpers for the Fleet console (components/fleet-console.tsx), kept here so tests can import them. */
-import { distance, heldForPerson, snapshot, type LiveTelemetry, type Point, type ReturnRecord } from './simulation';
-import { airborne, fmtMeters, type Drone, type PickupChoice } from './drone-mission';
+import { bearing, distance, heldForPerson, snapshot, type LiveTelemetry, type Point, type ReturnRecord } from './simulation';
+import { airborne, fmtMeters, type Drone, type DroneConfig, type PickupChoice } from './drone-mission';
 
 /** How long ago a timestamp was: seconds, then whole minutes, hours and days (never "320 min ago"). */
 export function ago(ts: number, now: number) {
@@ -53,3 +53,39 @@ export const pointOffset = ([lon, lat]: Point, north: number, east: number): Poi
 export const compass = (deg: number) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 /** Google Street View at a point, through the public Maps URLs API (no key needed; opens in Google Maps). */
 export const streetViewUrl = ([lon, lat]: Point) => `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat.toFixed(6)},${lon.toFixed(6)}`;
+/** Typical consumer-GPS error used for the flight-plan corridor (±m). An estimate for planning, not a measurement. */
+export const GPS_ERROR_M = 3;
+/** Horizontal speed assumed for the flight-plan time estimate (m/s). */
+export const PLAN_SPEED_MS = 3;
+const near = (m: number) => m < 10 ? `${m.toFixed(1)} m` : fmtMeters(m);
+export type PlanLeg = { from: string; to: string; a: Point; b: Point; meters: number; bearing: number };
+export type FlightPlan = { legs: PlanLeg[]; meters: number; minutes: number; corridor: Point[][]; escapes: [Point, Point][]; warnings: string[] };
+const ring = (c: Point, r: number) => Array.from({ length: 25 }, (_, i) => pointOffset(c, Math.cos(i / 24 * 2 * Math.PI) * r, Math.sin(i / 24 * 2 * Math.PI) * r));
+/**
+ * The mission the drone flies (home → pickup pad → drop pad → home, all at cruise altitude), with a ±GPS-error corridor around
+ * every leg and landing circle, the straight emergency return from the pickup pad (ABORT / link loss fly back to home), a rough
+ * time estimate, and warnings for setups that leave no margin. Pins are not included: a pin pickup is decided per return.
+ */
+export function flightPlan(c: DroneConfig, gpsError = GPS_ERROR_M): FlightPlan | null {
+  if (!c.pickupPad || !c.dropPad) return null;
+  const stops: [string, Point][] = [['Home', c.home], ['Pickup pad', c.pickupPad], ['Drop pad', c.dropPad], ['Home', c.home]];
+  const legs = stops.slice(1).map(([to, b], i): PlanLeg => { const [from, a] = stops[i]; return { from, to, a, b, meters: distance(a, b), bearing: bearing(a, b) }; });
+  const meters = legs.reduce((sum, l) => sum + l.meters, 0);
+  // Three climbs to cruise (~1 m/s) and three landings (~0.5 m/s) on top of the horizontal legs.
+  const minutes = (meters / PLAN_SPEED_MS + 3 * (c.cruiseAlt / 1 + c.cruiseAlt / 0.5)) / 60;
+  const corridor = [...legs.filter(l => l.meters > .1).map(l => {
+    const left = (l.bearing - 90) * Math.PI / 180, n = Math.cos(left) * gpsError, e = Math.sin(left) * gpsError;
+    return [pointOffset(l.a, n, e), pointOffset(l.b, n, e), pointOffset(l.b, -n, -e), pointOffset(l.a, -n, -e), pointOffset(l.a, n, e)];
+  }), ring(c.pickupPad, gpsError), ring(c.dropPad, gpsError), ring(c.home, gpsError)];
+  const warnings: string[] = [];
+  if (c.cruiseAlt < 5) warnings.push(`Cruise ${c.cruiseAlt} m is below 5 m: almost no room for GPS error or obstacles, and an ABORT this low switches to Return home close to the ground.`);
+  for (const [name, pad] of [['Pickup pad', c.pickupPad], ['Drop pad', c.dropPad]] as const) {
+    const d = distance(c.home, pad);
+    if (d < 2 * gpsError) warnings.push(`${name} is ${near(d)} from home, inside GPS error (about ±${gpsError} m each): it may land on the wrong spot.`);
+    else if (d >= 10 && d <= 30) warnings.push(`${name} is ${near(d)} from home: after landing there, the bridge can take it as home, so Return home would come back to it. Keep pads more than 30 m from home.`);
+    if (d + gpsError > c.radius) warnings.push(`${name} is within GPS error of the geofence edge.`);
+  }
+  const between = distance(c.pickupPad, c.dropPad);
+  if (between < 2 * gpsError) warnings.push(`Pickup and drop pads are ${near(between)} apart, inside GPS error: the landings may overlap.`);
+  return { legs, meters, minutes, corridor, escapes: [[c.pickupPad, c.home]], warnings };
+}

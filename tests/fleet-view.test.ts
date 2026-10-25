@@ -112,3 +112,20 @@ test('Street View links open Google Maps at the point (lat,lng order)', async ()
   const { streetViewUrl } = await import('../lib/fleet-view');
   assert.equal(streetViewUrl([-122.448821, 37.804262]), 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=37.804262,-122.448821');
 });
+test('flight plan: three legs, a GPS corridor, the emergency return, and honest warnings', async () => {
+  const { flightPlan, pointOffset } = await import('../lib/fleet-view');
+  const home: Point = [-122.4488, 37.8043];
+  const base = { home, pickupPad: pointOffset(home, 0, 40), dropPad: pointOffset(home, 40, 40), radius: 300, maxAlt: 15, cruiseAlt: 10 };
+  assert.equal(flightPlan({ ...base, dropPad: null }), null);
+  const p = flightPlan(base)!;
+  assert.deepEqual(p.legs.map(l => `${l.from}>${l.to}`), ['Home>Pickup pad', 'Pickup pad>Drop pad', 'Drop pad>Home']);
+  assert.ok(Math.abs(p.meters - (40 + 40 + Math.hypot(40, 40))) < 0.3);
+  assert.equal(p.corridor.length, 3 + 3);
+  assert.deepEqual(p.escapes, [[base.pickupPad, home]]);
+  assert.deepEqual(p.warnings, []);
+  // Last night's setup: 2 m cruise, pickup ~3 m from home, drop ~20 m away.
+  const risky = flightPlan({ ...base, cruiseAlt: 2, pickupPad: pointOffset(home, 0, 3), dropPad: pointOffset(home, 0, 20) })!;
+  assert.ok(risky.warnings.some(w => /below 5 m/.test(w)));
+  assert.ok(risky.warnings.some(w => /Pickup pad is 3\.0 m from home, inside GPS error/.test(w)));
+  assert.ok(risky.warnings.some(w => /Drop pad is 20 m from home: after landing there/.test(w)));
+});
