@@ -40,7 +40,7 @@ function DroneGlyph(){return <span className="ux-glyph" aria-hidden="true" dange
 export default function AeroApp({initialId}: {initialId?:string}) {
   const {prefs,setPrefs}=useAccessibility();
   const mapConfig=useMapConfig();
-  const [demoAccount,setDemoAccount]=useState(false);
+  const [demoAccount,setDemoAccount]=useState(false),[accountReturnsFailed,setAccountReturnsFailed]=useState(false);
   useEffect(()=>{let active=true;fetch('/api/account').then(r=>r.json() as Promise<{demo?:boolean}>).then(a=>{if(active)setDemoAccount(a.demo===true);}).catch(()=>{});return()=>{active=false;};},[]);
   const [pickupGuide,setPickupGuide]=useState<PickupGuide|null>(null);
   const [bookingDraft,setBookingDraft]=useState<BookingDraft|null>(null),[bookingPreset,setBookingPreset]=useState<Partial<PackageInput>>({}),[bookingError,setBookingError]=useState(''),[retryCheck,setRetryCheck]=useState<ReturnCheckResult|null>(null);
@@ -81,6 +81,10 @@ export default function AeroApp({initialId}: {initialId?:string}) {
   }
   const track=useCallback(()=>{setMatch(null);setView('track');},[]);
   useEffect(()=>{if(match?.phase!=='found')return;const timer=setTimeout(track,MATCHED_HOLD_MS);return()=>clearTimeout(timer);},[match,track]);
+  // After Request the booking dialog closes and its opener is gone: move focus to the sheet's heading at each matching step
+  // (finding, found, then the tracking card), so keyboard and screen-reader users land on the news. Never on a plain page load.
+  const sheetHeading=useRef<HTMLHeadingElement>(null),lastPhase=useRef<string|undefined>(undefined);
+  useEffect(()=>{const phase=match?.phase,was=lastPhase.current;lastPhase.current=phase;if(phase===was||(!phase&&was!=='found'))return;sheetHeading.current?.focus({preventScroll:true});},[match?.phase]);
   function goHome(){recordRef.current=null;eventRef.current='';setRecord(null);setMatch(null);setView('home');setDialog(null);setSimulator(false);setMobileExpanded(false);setPickupGuide(null);setError('');setOffline(false);window.history.replaceState({},'','/');void loadHistory().catch(()=>{});}
   async function openReturn(id:string){try{accept(await api(`/api/returns/${id}`));setMatch(null);setView('track');setDialog(null);window.history.replaceState({},'',`/track/${id}`);}catch(e){setError((e as Error).message);}}
   async function refresh(){const r=recordRef.current;if(!r||inflight.current)return;inflight.current=true;try{const data=await api(`/api/returns/${r.id}`);if(recordRef.current?.id===r.id)accept(data);}catch(e){if(recordRef.current?.id===r.id){setOffline(true);setError((e as Error).message);}}finally{inflight.current=false;}}
@@ -142,23 +146,24 @@ export default function AeroApp({initialId}: {initialId?:string}) {
     <nav className="ux-foot ux-foot-links" aria-label="More"><button onClick={showHistory}>My returns</button><a href="/merchant">Merchant desk</a><a href="/fleet">Drone fleet</a><a href="/demo">Judge room</a><button onClick={()=>setDialog('accessibility')}>Accessibility</button></nav>
     <p className="ux-signoff"><b>AERO</b>A little less on your to-do list.</p>
   </div>;
-  const findingSheet=match?.phase==='finding'&&<div className="ux-match" aria-busy="true">
+  const findingSheet=match?.phase==='finding'&&<div className="ux-match">
     {simLabel}
-    <h1 aria-live="polite">Finding your nearest drone…</h1>
+    <h1 ref={sheetHeading} tabIndex={-1} aria-live="polite">Finding your nearest drone…</h1>
     <p>Matching a free simulated drone to {match.address.split(',')[0]}.</p>
     <div className="ux-match-progress" role="progressbar" aria-label="Finding your nearest drone"><i/></div>
-    <div className="ux-stop"><span className="ux-dot"/><div><small>Pickup</small><strong>{match.address.split(',')[0]}</strong><p>{free.length} simulated drones standing by nearby</p></div></div>
+    <div className="ux-stop"><span className="ux-dot"/><div><small>Pickup</small><strong>{match.address.split(',')[0]}</strong>{free.length>0&&<p>{free.length} simulated {free.length===1?'drone':'drones'} standing by nearby</p>}</div></div>
   </div>;
   const foundMinutes=Math.max(1,Math.ceil(timing(r).pickup/60));
   const foundSheet=found&&<div className="ux-match found">
     {simLabel}
-    <h1 aria-live="polite">{held?`${droneName} is matched`:`${droneName} is on the way`}</h1>
+    <h1 ref={sheetHeading} tabIndex={-1} aria-live="polite">{held?`${droneName} is matched`:`${droneName} is on the way`}</h1>
     <div className="ux-courier"><div className="ux-courier-avatar"><DroneIllustration compact/></div><div className="ux-courier-info"><strong>{droneName}</strong><span>{r.drone?`${km(r.drone.meters)} away · `:''}{held?'stays on the ground until a person approves it':`arriving in about ${foundMinutes} min`}</span><span className="ux-courier-state">{r.package.service==='priority'?'AERO Priority':'AERO Standard'} · Simulated</span></div></div>
+    <div className="ux-stop"><span className="ux-square"/><div><small>Return to{live?'':' · Auto-matched · Simulated'}</small><strong>{destName}</strong></div></div>
     <button className="ux-primary" onClick={track}>Track your drone<ArrowRight size={18}/></button>
   </div>;
   const trackSheet=<>
           <div className="ux-eta">
-            <div><span className="ux-eyebrow">{shortId(r.id)} · {r.package.retailer} return</span><h1>{headline}</h1><p>{subline}</p></div>
+            <div><span className="ux-eyebrow">{shortId(r.id)} · {r.package.retailer} return</span><h1 ref={sheetHeading} tabIndex={-1}>{headline}</h1><p>{subline}</p></div>
             <div className={`ux-eta-badge ${complete?'done':cancelled||liveFault||r.failed?'warn':waiting||held?'wait':''}`} aria-live="polite">{complete?<Check size={30}/>:cancelled?<X size={28}/>:held?<LogInIcon size={28}/>:liveFault||r.failed?<TriangleAlert size={26}/>:waiting||handoff||hovering||live?.phase==='READY_TO_LAUNCH'?<Package size={28}/>:<><strong>{etaMinutes}</strong><small>min</small></>}</div>
           </div>
           {!live&&<div className="ux-sheet-label">{simLabel}</div>}
@@ -202,15 +207,16 @@ export default function AeroApp({initialId}: {initialId?:string}) {
           <a className="ux-round ux-fleet-entry" href="/fleet" aria-label="Drone fleet console" title="Drone fleet"><Radio size={18}/></a>
           <button className="ux-round" aria-label="Accessibility settings" title="Accessibility" onClick={()=>setDialog('accessibility')}><SlidersHorizontal size={17}/></button>
           {tracking&&<button className="ux-pill" aria-label="Request a drone for a new return" onClick={()=>openBooking()}><Plus size={17}/><span>New return</span></button>}
-          <button className="ux-avatar" aria-label="Your account" onClick={()=>setDialog('session')}><LogInIcon size={18}/></button>
+          <button className="ux-avatar" aria-label="Your account" onClick={()=>{setDialog('session');setAccountReturnsFailed(false);void loadHistory().catch(()=>setAccountReturnsFailed(true));}}><LogInIcon size={18}/></button>
         </div>
       </header>
       {tracking&&<div className="ux-map-chips" aria-label="Flight telemetry"><span><ArrowUp size={14}/>{Math.round(s.altitude)} m</span><span><Wind size={14}/>{Math.round(s.speed*3.6)} km/h</span><span><Battery size={14}/>{noReport?'—':`${Math.round(s.battery)}%`}</span><span className="muted">{live?(noReport?'No report':live.stale||terminal?'Last known':'Live telemetry'):'Simulated'}</span></div>}
       {tracking&&<button className="ux-float earth" onClick={()=>setDialog('earth')}><Earth size={16}/>Earth & Street View</button>}
-      <aside className={`ux-sheet ${mobileExpanded?'open':''}`} aria-label={tracking?'Return status':found||match?'Matching your drone':'Request a drone'}>
+      {/* The sheet is the page's main task content, so a named region rather than a complementary aside. */}
+      <section className={`ux-sheet ${mobileExpanded?'open':''}`} aria-label={tracking?'Return status':found||match?'Matching your drone':'Request a drone'}>
         <button className="ux-handle" aria-label={mobileExpanded?'Collapse details':'Expand details'} onClick={()=>setMobileExpanded(!mobileExpanded)}><span/></button>
         <div className="ux-sheet-scroll">{findingSheet||foundSheet||(tracking?trackSheet:homeSheet)}</div>
-      </aside>
+      </section>
       {tracking&&!live&&<button className="ux-float demo" onClick={()=>setSimulator(!simulator)}><SlidersHorizontal size={14}/>Demo controls<ChevronDown size={13} className={simulator?'turned':''}/></button>}
       {tracking&&simulator&&!live&&<div className="simulator-panel ux-panel"><div><strong>Simulation controls</strong><button className="icon-button small" onClick={()=>setSimulator(false)} aria-label="Close simulation controls"><X size={16}/></button></div><p>Explore the full journey at your own pace.</p><div className="sim-speeds">{[1,5,10].map(rate=><button key={rate} disabled={busy||terminal} className={r.rate===rate?'selected':''} onClick={()=>void action('speed',rate)}>{rate}×</button>)}<button disabled={busy||terminal} title={r.paused?'Resume':'Pause'} onClick={()=>void action(r.paused?'resume':'pause')}>{r.paused?<Play size={15}/>:<Pause size={15}/>}</button></div><button className="secondary full small" disabled={busy||terminal||waiting} onClick={()=>void action('advance')}>Next milestone<ArrowRight size={15}/></button>{waiting&&<small>Confirm package loading to continue.</small>}<a className="demo-link" href="/demo">Demo script & all 58 tracks <ArrowUpRight size={12}/></a><div className="sim-bottom"><button onClick={()=>setDialog('reset')}><RotateCcw size={13}/>Reset demo</button><button disabled={terminal||busy} onClick={()=>void action(r.failed?'retry':'fail')}>{r.failed?'Recover':'Test interruption'}</button></div></div>}
       {error&&<div className="connection-error ux-error" role="alert"><TriangleAlert size={17}/><span>{error}</span><button onClick={()=>record?void refresh():location.reload()}>Retry</button></div>}
@@ -234,7 +240,7 @@ export default function AeroApp({initialId}: {initialId?:string}) {
       {shown==='receipt'&&<div className="receipt-content"><div className="receipt-success"><Check size={35}/></div><span className="eyebrow">{live?'DROP-PAD HANDOFF CONFIRMED':'SIMULATED HANDOFF CONFIRMED'}</span><h3>Your return has landed.</h3><p>One less thing between you and your day.</p><div className="receipt-paper"><span className="receipt-wordmark">AERO</span><dl>{[['Tracking ID',shortId(r.id)],['Drone',droneName],['Pickup confirmed',r.events.find(e=>e.state==='PACKAGE_LOADED')?clock(r.events.find(e=>e.state==='PACKAGE_LOADED')!.at):'Pending'],['Handoff time',r.events.find(e=>e.state==='COMPLETED')?clock(r.events.find(e=>e.state==='COMPLETED')!.at):'Pending'],['Destination',destName],['Package',`${r.package.retailer} · ${r.package.weight} kg`],['Return reference',r.package.returnReference||'Not provided'],['Claude check',checkLabel(r.review,clock)],['Status',live?'Received · Live flight':'Received · Simulation']].map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div><p className="fine-print">{live?'This confirms the operator unloaded your package at the drop pad.':'This confirms a simulated facility handoff.'} Retailer refund approval is a separate process.</p><button className="primary full" onClick={receipt}><Download size={17}/>{live?'Download receipt':'Download demo receipt'}</button><button className="text-button centered" onClick={goHome}>Done · back to home <ArrowRight size={15}/></button></div>}
       {shown==='help'&&live&&tracking&&<div className="detail-content"><p className="body-copy">This is a live drone flight with a pilot in command. The pilot can pause or end it at any time.</p><details open><summary>My drone is waiting at pickup</summary><p>Place your package, step back, then choose “Confirm package is loaded”. The drone stays on the ground until the pilot clears the area and launches.</p></details><details><summary>The signal was lost</summary><p>The drone follows its onboard failsafe and flies home if the link stays down. The last known position stays on the map.</p></details><details><summary>I need to cancel</summary><p>You can cancel before loading from Package details. A flying drone heads home; one already landed at your pickup waits for the pilot.</p></details><button className="primary full" onClick={()=>setDialog(null)}>Got it<Check size={17}/></button></div>}
       {shown==='help'&&!(live&&tracking)&&<div className="detail-content"><p className="body-copy">{tracking?'You’re in a working simulation. You can pause the flight, speed it up, or jump to the next milestone using Demo controls.':'You’re in a working simulation. Nothing is booked until you choose Request a drone; AERO then matches the nearest free simulated drone.'}</p><details open><summary>{tracking?'My drone is waiting at pickup':'How do I start?'}</summary><p>{tracking?'Choose “Confirm package is loaded” on the tracking card, then confirm. The drone will only depart after that step.':'Choose Request a drone, add your package, pick AERO Standard or Priority, then request. Your drone flies to your pickup and waits until you confirm the package is loaded.'}</p></details><details><summary>The map or connection stopped</summary><p>The last confirmed telemetry stays visible. Your return is saved on the server. Use Retry to reconnect, or refresh the page.</p></details><details><summary>I need to cancel</summary><p>You can cancel before the package is loaded from Package details. After loading, finish the demo or use Reset demo.</p></details>{tracking?<button className="primary full" onClick={()=>{setDialog(null);setSimulator(true);}}>Open demo controls<SlidersHorizontal size={17}/></button>:<button className="primary full" onClick={()=>openBooking()}>Request a drone<ArrowRight size={17}/></button>}</div>}
-      {shown==='session'&&<AccountPanel onHistory={showHistory}/>}
+      {shown==='session'&&<AccountPanel onHistory={showHistory} returns={history} returnsFailed={accountReturnsFailed} now={clockNow} onOpen={id=>void openReturn(id)}/>}
       {(shown==='reset'||shown==='cancel')&&<div className="detail-content"><p className="body-copy">{shown==='reset'?'This restarts the current simulated return and clears its journey events. Your package details and drone stay the same.':live?'A flying drone heads straight home. If it has already landed at pickup, the pilot brings it back.':'Your drone will stop in this simulation. No real pickup or payment has been made.'}</p><div className="confirm-buttons"><button className="secondary" onClick={()=>setDialog(null)}>Keep tracking</button><button className="primary" disabled={busy} onClick={async()=>{if(await action(shown==='reset'?'reset':'cancel'))setDialog(null);}}>{shown==='reset'?'Restart demo':live?'Cancel live flight':'Cancel return'}</button></div></div>}
     </Modal>}
   </main>;

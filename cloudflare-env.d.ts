@@ -5,6 +5,7 @@ declare namespace Cloudflare {
     SUPABASE_PUBLISHABLE_KEY?: string;
     SUPABASE_GOOGLE_ENABLED?: string;
     SUPABASE_AMAZON_ENABLED?: string;
+    SUPABASE_EMAIL_ENABLED?: string;
     SUPABASE_COOKIE_SECURE?: string;
     GOOGLE_MAPS_BROWSER_KEY?: string;
     GOOGLE_MAPS_MAP_ID?: string;

@@ -18,10 +18,12 @@ AMAZON_CLIENT_ID=
 AMAZON_CLIENT_SECRET=
 AMAZON_REDIRECT_URI=http://127.0.0.1:5173/api/amazon/callback
 
-# Supabase Auth (Google + custom:amazon providers configured in Supabase)
+# Supabase Auth (Google, custom:amazon and Email providers configured in Supabase)
 SUPABASE_URL=
 SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_GOOGLE_ENABLED=false
 SUPABASE_AMAZON_ENABLED=false
+# Email + password sign-up/sign-in; set true only after the Email provider is on in Supabase (docs/ACCOUNTS.md).
+SUPABASE_EMAIL_ENABLED=false
 # Set false only for local HTTP development. Hosted HTTPS defaults to Secure cookies.
 SUPABASE_COOKIE_SECURE=false

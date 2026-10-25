@@ -31,6 +31,7 @@ Set with `npx wrangler secret put NAME --config dist/server/wrangler.json` after
 | `APIFY_TOKEN`, `APIFY_ACTOR_ID` | Product-spec lookup, also used by the Claude return check | Claude relies on the entered measurements |
 | `AMAZON_CLIENT_ID`, `AMAZON_CLIENT_SECRET`, `AMAZON_REDIRECT_URI` | Login with Amazon profile linking; `AMAZON_REDIRECT_URI` must be `https://aero-returns.kv15.workers.dev/api/amazon/callback` | Linking is disabled with an explanation; manual Amazon return import still works |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_GOOGLE_ENABLED` | Google sign-in; add the workers.dev callback to Supabase's redirect allowlist first | Sign-in buttons stay disabled; guests and the demo account work |
+| `SUPABASE_EMAIL_ENABLED` (with `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`) | Email + password sign-up and sign-in; turn on Supabase's Email provider first and choose "Confirm email" off, or on with custom SMTP ([`ACCOUNTS.md`](ACCOUNTS.md#email-and-password)) | No email form; guests, the demo account and any configured Google sign-in work |
 
 On October 24 the Worker reported `ANTHROPIC_API_KEY` and `DRONE_LINK_SECRET` as set, and Twilio, Google Maps, Apify, Amazon and Supabase as not set (`/api/integrations`, `/api/fleet`, `/api/account`). The Google Maps demo key and Supabase settings of the earlier ChatGPT Sites prototype were never copied to the Worker.
 

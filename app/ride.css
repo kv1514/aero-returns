@@ -37,14 +37,14 @@ body[data-font=true] :is(.ux,.fleet){--ux-font:var(--font);--ux-head:var(--font)
 .ux-map-chips span{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:16px;background:var(--ux-bg);box-shadow:var(--ux-shadow);font-weight:600;font-size:calc(13px * var(--font-scale,1));font-variant-numeric:tabular-nums}
 .ux-map-chips span.muted{color:var(--ux-muted);font-weight:500}
 .ux .map-controls{top:76px;right:16px;border:0;border-radius:12px;box-shadow:var(--ux-shadow);background:var(--ux-bg)}
-.ux .map-controls button{color:var(--ux-ink);width:40px;height:40px}
+.ux .map-controls button{color:var(--ux-ink);width:44px;height:44px}
 .ux .map-controls button:hover,.ux .map-controls button.active{background:var(--ux-soft);color:var(--ux-ink)}
 .ux .map-view-controls{flex-direction:row;bottom:24px;left:calc(432px + (100% - 432px)/2);transform:translateX(-50%);border:0;border-radius:22px;box-shadow:var(--ux-shadow);background:var(--ux-bg);padding:4px}
-.ux .map-view-controls button{font-size:calc(13px * var(--font-scale,1));font-weight:600;color:var(--ux-ink);padding:9px 14px;border-radius:18px}
+.ux .map-view-controls button{font-size:calc(13px * var(--font-scale,1));font-weight:600;color:var(--ux-ink);padding:9px 14px;border-radius:22px;min-height:44px}
 .ux .map-view-controls button.selected{background:var(--ux-ink);color:var(--ux-bg)}
 .ux .map-attribution{bottom:4px;right:6px;font-size:calc(10px * var(--font-scale,1));z-index:6;background:var(--ux-bg);color:var(--ux-muted)}
 .ux .map-attribution a{color:inherit}
-.ux-float{position:absolute;z-index:8;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:20px;background:var(--ux-bg);box-shadow:var(--ux-shadow);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
+.ux-float{position:absolute;z-index:8;display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:22px;background:var(--ux-bg);box-shadow:var(--ux-shadow);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
 .ux-float.earth{right:16px;bottom:24px}
 .ux-float.demo{left:432px;bottom:24px}
 .ux-float .turned{transform:rotate(180deg)}
@@ -120,7 +120,7 @@ body:is([data-theme],[data-contrast]) .ux .ux-eta>.ux-eta-badge small{color:inhe
 .ux-dot,.ux-square{width:12px;height:12px;background:var(--ux-ink);margin-top:5px;flex-shrink:0;position:relative;z-index:1;box-shadow:0 0 0 3px var(--ux-bg)}
 .ux-dot{border-radius:50%}
 .ux-tag{display:inline-flex;align-items:center;gap:3px;background:#e7f8ef;color:#037a41;border-radius:4px;padding:2px 5px;font-size:calc(12px * var(--font-scale,1));font-weight:600}
-.ux-icon{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--ux-ink)}
+.ux-icon{width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--ux-ink)}
 .ux-icon:hover{background:var(--ux-soft)}
 .ux-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--ux-line);border-bottom:1px solid var(--ux-line);text-align:left;color:var(--ux-ink)}
 .ux-row>span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px}
@@ -137,8 +137,10 @@ body:is([data-theme],[data-contrast]) .ux .ux-eta>.ux-eta-badge small{color:inhe
 .ux-foot span{flex:1}
 .ux-foot button,.ux-foot a{font-weight:600;color:var(--ux-ink);text-decoration:underline}
 .ux-foot-links{flex-wrap:wrap;gap:0 16px;padding-top:0}
-/* At least 32px tall targets for the footer links and Help (the WCAG minimum is 24px). */
-.ux-foot :is(button,a){display:inline-flex;align-items:center;min-height:32px}
+/* 44px tall targets for the footer links and Help, for older adults and less precise taps. */
+.ux-foot :is(button,a){display:inline-flex;align-items:center;min-height:44px}
+/* Headings that receive focus after Request (finding, matched, tracking) need no ring for pointer users. */
+.ux-sheet h1[tabindex]:focus:not(:focus-visible){outline:none}
 
 @media(max-width:1000px) and (min-width:761px){.ux-map-chips{display:none}.ux-sheet{width:360px}.ux-float.demo,.ux .simulator-panel.ux-panel,.ux .ux-error{left:392px}.ux .map-view-controls{left:calc(392px + (100% - 392px)/2)}}
 /* Below ~1066px the centred 3D/Follow group meets the Earth & Street View and Demo controls floats (bottom:24px, 40px tall): stack it above them. */
@@ -214,7 +216,7 @@ a.ux-row{text-decoration:none}
 .ux-recent-head h2{font-size:calc(17px * var(--font-scale,1));font-weight:700}
 .ux-recent-head button{font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink);text-decoration:underline;min-height:32px}
 .ux-actions.two{gap:8px}.ux-actions.two>*{flex:1;min-width:0}
-.ux-match-progress{height:4px;border-radius:2px;background:var(--ux-line);overflow:hidden;position:relative}
+.ux-match-progress{height:6px;border-radius:3px;background:var(--ux-line);overflow:hidden;position:relative}
 .ux-match-progress i{position:absolute;inset:0;width:40%;background:var(--ux-ink);animation:ux-slide 1.2s ease-in-out infinite}
 .ux-match .ux-stop p{font-size:calc(13px * var(--font-scale,1));color:var(--ux-muted)}
 .ux-match .ux-stop small{font-size:calc(12px * var(--font-scale,1));color:var(--ux-muted)}
@@ -420,15 +422,158 @@ body[data-theme=dark] .modal .modal-shell .provider-label>span{color:var(--m-mut
 .modal .modal-shell .integration-row>span.configured{color:var(--m-ok)!important;background:var(--m-ok-bg)}
 body[data-theme=dark] .modal .modal-shell :is(.pickup-steps li.active,.pickup-location>a){color:#9cc0ff}
 body[data-theme=dark] .modal .modal-shell .pickup-steps li.active>span{background:#233b60;border-color:#3a5a8a}
-.modal .modal-shell :is(.text-button,.danger-link,.pickup-location>a,.qr-actions>a){min-height:32px}
+/* 44px targets for the dialogs' text buttons and disclosures (older adults, less precise taps). */
+.modal .modal-shell :is(.text-button,.danger-link,.pickup-location>a,.qr-actions>a){min-height:44px}
 .modal .modal-shell .qr-actions>a{display:inline-flex;align-items:center}
-.modal .modal-shell details>summary{padding:4px 0}
+.modal .modal-shell details>summary{padding:11px 0}
 .earth-explorer .fleet-pin span{font-size:calc(12px * var(--font-scale,1))}
+
+/* Booking wizard: calmer hierarchy, 44px targets, a drop-off that reads as information, and dark-mode borders that match the dialog. */
+.modal{--m-line:#dde3ea}
+body[data-theme=dark] .modal{--m-line:#334357}
+body[data-contrast=true] .modal{--m-line:#8a8a8a}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.nowrap{white-space:nowrap}
+/* Legacy light borders drew bright white rules on the dark dialog. */
+body[data-theme=dark] .modal .modal-shell :is(.wizard-progress,.wizard-footer,.facility-option,.price-breakdown .total,details,.access-row,.access-toggle){border-color:var(--m-line)}
+/* Focus: one 3px ring for fields and disclosures too (globals set outline:0 on inputs), and a clear border while typing. */
+.modal .modal-shell :is(input,select,textarea,summary,h3[tabindex]):focus-visible{outline:3px solid var(--ux-blue,#276ef1);outline-offset:2px}
+.modal .modal-shell .form-step :is(input:not([type=checkbox]),select):focus{border-color:var(--ux-blue,#276ef1);box-shadow:none}
+.modal .modal-shell .form-intro h3:focus:not(:focus-visible){outline:none}
+/* Close (X): 44px and full-contrast in both themes; the negative margin keeps the header height. */
+.modal-shell>header .icon-button{width:44px;height:44px;margin:-5px -10px -5px 0;border-radius:50%;color:var(--m-ink)}
+.modal-shell>header .icon-button:hover{background:var(--m-chip)}
+/* Draft notice: one line with a full-size Start over. */
+.modal .modal-shell .draft-notice{align-items:center;gap:8px;padding:4px 4px 4px 14px;margin-bottom:16px}
+.modal .modal-shell .draft-notice button{min-height:44px;padding:0 12px;font-weight:600}
+.modal .modal-shell .draft-privacy{margin:14px 0 0!important}
+/* Stepper: done, current and upcoming look different (not only check versus number). */
+.modal .modal-shell .wizard-progress>div.done{color:var(--m-ink)!important}
+.modal .modal-shell .wizard-progress>div.current{font-weight:700}
+.modal .modal-shell .wizard-progress>div.done>span{background:var(--m-chip);color:var(--m-ink);box-shadow:inset 0 0 0 1.5px var(--m-ink)}
+/* Step 1: the demo-script controls are full-size and easy to spot. */
+.modal .modal-shell .pickup-location .fine-print{margin:6px 0 8px!important}
+.modal .modal-shell .pickup-location details{margin:0;padding:0;border:0}
+.modal .modal-shell .pickup-location details>summary{padding:10px 0;color:var(--m-ink)!important;font-weight:600;font-size:calc(15px * var(--font-scale,1))!important}
+.modal .modal-shell .pickup-location .address-options button{min-height:44px;font-size:calc(14px * var(--font-scale,1))!important}
+.modal .modal-shell .pickup-location .address-options button[aria-current=true]{color:var(--m-ink)!important;font-weight:600}
+.modal .modal-shell .pickup-location>.text-button{justify-content:flex-start;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.modal .modal-shell .qr-actions{flex-wrap:wrap;gap:0 16px;margin-bottom:16px}
+.modal .modal-shell .qr-actions .text-button{font-weight:600;font-size:calc(15px * var(--font-scale,1))!important;text-decoration:underline;text-underline-offset:3px}
+.modal .modal-shell .qr-actions>a{white-space:nowrap}
+.modal .modal-shell .checkbox input{flex:none;width:calc(22px * var(--font-scale,1));height:calc(22px * var(--font-scale,1));margin:0;accent-color:var(--m-ink)}
+/* Choose a ride: a radio dot shows the chosen tier at a glance (phones hide the service icon). */
+.ride-option::before{content:'';flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--ux-muted,#5e5e5e);box-sizing:border-box}
+.ride-option.selected::before{border-color:var(--ux-ink,#000);background:radial-gradient(circle,var(--ux-ink,#000) 0 5px,transparent 5.5px)}
+.ride-option.ineligible::before{opacity:.4}
+body[data-theme=dark] .modal .ride-main .ride-eta{color:var(--m-ink)!important}
+body[data-theme=dark] .modal .ride-option.ineligible .ride-eta{color:var(--m-muted)!important}
+body[data-theme=dark] .ride-option .service-icon{background:#2c3b52;color:#cfe0ff}
+/* Drop-off: where the return goes. Information, not a picker: no border, hover, cursor or selected state. */
+.modal .modal-shell .section-heading{flex-wrap:wrap;gap:6px 10px;margin:26px 0 10px}
+.modal .modal-shell .section-heading h4{font-size:calc(17px * var(--font-scale,1));font-weight:700;letter-spacing:-.01em;color:var(--m-ink)}
+.modal .modal-shell .section-heading>.dropoff-sim{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:3px 10px;border-radius:13px;background:var(--m-chip);font-weight:600;white-space:nowrap}
+.modal .modal-shell .dropoff-sim i{width:7px;height:7px;border-radius:50%;background:#8a8a8a;flex:none}
+.modal .modal-shell .dropoff-match{display:flex;gap:12px;align-items:flex-start;padding:16px;border-radius:14px;background:var(--m-chip);color:var(--m-ink)}
+.modal .modal-shell .dropoff-match>svg{flex:none;margin-top:2px}
+.modal .modal-shell .dropoff-match>div{flex:1;min-width:0}
+.modal .modal-shell .dropoff-match small{display:block;font-size:calc(13px * var(--font-scale,1));font-weight:600;color:var(--m-muted)!important}
+.modal .modal-shell .dropoff-match strong{display:block;font-size:calc(18px * var(--font-scale,1));font-weight:700;line-height:1.3;margin:2px 0}
+.modal .modal-shell .dropoff-match span{display:block;font-size:calc(14px * var(--font-scale,1));line-height:1.45}
+.modal .modal-shell .dropoff-match p{margin:8px 0 0;font-size:calc(14px * var(--font-scale,1));line-height:1.5;color:var(--m-muted)}
+.modal .modal-shell .dropoff-none{padding:14px 16px;border-radius:14px;background:var(--m-warn-bg);color:var(--m-warn);font-size:calc(14px * var(--font-scale,1));font-weight:600;line-height:1.45}
+.modal .modal-shell .dropoff-others-title{margin:20px 0 4px;font-size:calc(14px * var(--font-scale,1));font-weight:700;color:var(--m-ink)}
+.modal .modal-shell .dropoff-others{list-style:none;margin:0;padding:0}
+.modal .modal-shell .dropoff-others li{padding:10px 0;border-top:1px solid var(--m-line)}
+.modal .modal-shell .dropoff-others li:last-child{border-bottom:1px solid var(--m-line)}
+.modal .modal-shell .dropoff-others strong{display:block;font-size:calc(15px * var(--font-scale,1));font-weight:600;color:var(--m-ink)}
+.modal .modal-shell .dropoff-others small{display:block;margin-top:2px;font-size:calc(14px * var(--font-scale,1));line-height:1.45;color:var(--m-muted)!important}
+/* Review & request: the required checkbox looks like the step's one task, and the review box loses its empty top and bottom. */
+.modal .modal-shell .form-step label.review-check{color:var(--m-ink)!important;font-size:calc(15px * var(--font-scale,1))!important;line-height:1.5;padding:14px;border:2px solid var(--m-line);border-radius:12px;gap:12px;margin-top:20px!important}
+.modal .modal-shell .form-step label.review-check:has(input:checked){border-color:var(--m-ink)}
+.modal .modal-shell .review-check input{margin-top:1px}
+.modal .modal-shell .review-box>div:first-child{margin-top:0}
+.modal .modal-shell .review-box>div:last-child{margin-bottom:0}
+.modal .modal-shell .review-sub{display:block;font-style:normal;font-size:calc(13px * var(--font-scale,1));color:var(--m-muted);margin-top:3px}
+/* Footer: Continue / Request stays in reach while the step scrolls; the hint says why Request is still off. */
+.modal .modal-shell .wizard-footer{position:sticky;bottom:0;z-index:4;flex-wrap:wrap;align-items:center;background:var(--m-bg);margin:18px -28px -26px;padding:14px 28px 16px}
+.modal:has(.wizard-footer){scroll-padding:76px 0 112px}
+.modal .modal-shell .footer-hint{flex:1 1 100%;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:0 0 2px;font-size:calc(14px * var(--font-scale,1));font-weight:600;color:var(--m-ink)}
+.modal .modal-shell .footer-hint svg{flex:none}
+.modal .modal-shell .access-toggle input{flex:none;width:calc(22px * var(--font-scale,1));height:calc(22px * var(--font-scale,1));margin:0 0 0 12px}
+@media(max-width:760px){
+  .modal .modal-shell .wizard-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-bottom:16px;margin-bottom:18px}
+  .modal .modal-shell .wizard-progress>div{flex-direction:column;align-items:flex-start;gap:6px;line-height:1.25}
+  .modal .modal-shell .wizard-footer{margin:16px -20px -22px;padding:12px 20px 14px}
+  .modal .modal-shell .wizard-footer{gap:8px}
+  .modal .modal-shell .wizard-footer .primary{flex:1;min-width:0;min-height:52px;padding:6px 14px}
+  .modal .modal-shell .wizard-footer .secondary{flex:none;min-height:52px;padding:6px 14px}
+  .modal .modal-shell .footer-hint{justify-content:flex-start}
+  /* Phones (no service icon): dot | name + limits | price, with the ETA across the full width so it stays on one line. */
+  .ride-option{display:grid;grid-template-columns:22px minmax(0,1fr) auto;column-gap:10px;row-gap:3px;align-items:start}
+  .ride-option::before{grid-column:1;grid-row:1 / span 3;align-self:center}
+  .ride-option .ride-main{display:contents}
+  .ride-option .ride-main strong{grid-column:2;grid-row:1}
+  .ride-option .ride-main small:not(.ride-eta){grid-column:2;grid-row:2}
+  .ride-option .ride-main .ride-eta{grid-column:2 / 4;grid-row:3}
+  .ride-option .ride-price{grid-column:3;grid-row:1 / span 2;max-width:7.5em;white-space:normal;text-align:right}
+  /* Larger Text size (or a narrow phone): the price and "Demo · no charge" move to their own row under the ETA,
+     so the tier name, limits and ETA each keep one line instead of squeezing beside a wide price column. */
+  .ride-list{container-type:inline-size}
+  @container (max-width:19em){
+    .ride-option::before{grid-row:1 / span 4}
+    .ride-option .ride-price{grid-column:2 / 4;grid-row:4;max-width:none;flex-direction:row;align-items:baseline;gap:8px;text-align:left;margin-top:2px}
+  }
+}
+@media(max-width:480px){.modal .modal-shell .form-grid{grid-template-columns:1fr}}
+/* Narrow phones: the decorative arrow goes so "Request AERO Standard" fits on one line beside Back. */
+@media(max-width:420px){.modal .modal-shell .wizard-footer .primary>svg{display:none}.modal .modal-shell .wizard-footer :is(.primary,.secondary){padding:6px 10px}}
+/* Your account: the email account form and the signed-in account's recent returns. Same dialog tokens, so light, dark, high contrast and Text size follow. */
+.account-panel{--acct-line:#dce4ee;--acct-field:#fff}
+body[data-theme=dark] .account-panel{--acct-line:#3a4d68;--acct-field:#233147}
+body[data-contrast=true] .account-panel{--acct-line:#6b7c93}
+body[data-theme=dark][data-contrast=true] .account-panel{--acct-line:#9fb0c8}
+.account-divider{display:flex;align-items:center;gap:12px;margin:18px 0 6px;color:var(--m-muted);font-size:calc(13px * var(--font-scale,1))}
+.account-divider::before,.account-divider::after{content:'';flex:1;border-top:1px solid var(--acct-line)}
+.account-email{display:flex;flex-direction:column;margin:8px 0 12px}
+.account-email h4,.account-recent h4{margin:0 0 12px;color:var(--m-ink);font-size:calc(16px * var(--font-scale,1));font-weight:650}
+/* Equal halves at normal size; a label never breaks inside its button (large Text size widens that one instead), and the switch stacks only if both cannot fit. */
+.account-mode{display:flex;flex-wrap:wrap;gap:4px;padding:4px;margin-bottom:14px;background:var(--m-chip);border-radius:12px}
+.account-mode button{flex:1 1 0;min-width:max-content;min-height:40px;padding:8px 10px;border-radius:9px;color:var(--m-muted);font-size:calc(14px * var(--font-scale,1));font-weight:550}
+.account-mode button[aria-pressed=true]{background:var(--m-bg);color:var(--m-ink);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.account-field{display:block;margin:10px 0 6px;color:var(--m-ink);font-size:calc(14px * var(--font-scale,1));font-weight:550}
+.account-input,.account-password{width:100%;min-height:46px;border:1px solid var(--acct-line);border-radius:10px;background:var(--acct-field);color:var(--m-ink)}
+.account-input{display:block;padding:11px 12px;font-size:calc(16px * var(--font-scale,1));min-width:0}
+.account-password{display:flex;align-items:stretch;overflow:hidden}
+.account-password input{flex:1;min-width:0;border:0;background:none;color:inherit;padding:11px 12px;font-size:calc(16px * var(--font-scale,1))}
+.account-password button{display:inline-flex;align-items:center;gap:6px;padding:0 14px;color:var(--m-ink);font-size:calc(13px * var(--font-scale,1));font-weight:550;border-left:1px solid var(--acct-line)}
+.account-input:focus-visible,.account-password:focus-within{outline:3px solid #91b6ff;outline-offset:1px}
+.account-password input:focus-visible,.account-password button:focus-visible{outline:0}
+.account-password button:focus-visible{text-decoration:underline}
+.account-hint{margin:6px 0 0;color:var(--m-muted);font-size:calc(13px * var(--font-scale,1))}
+.account-email>.primary{margin-top:16px}
+.account-email .error-note{margin-top:12px}
+.account-notice{margin:12px 0 0;padding:12px;border-radius:8px;color:var(--m-ok);background:var(--m-ok-bg);font-size:calc(14px * var(--font-scale,1));line-height:1.5}
+.account-email>.fine-print{margin:12px 0 4px!important}
+.account-signed-in{margin:14px 0 4px;color:var(--m-muted);font-size:calc(14px * var(--font-scale,1));overflow-wrap:anywhere}
+.account-signed-in strong{color:var(--m-ink);font-weight:600}
+.account-recent{margin:16px 0 4px}
+.account-recent ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--acct-line)}
+.account-recent li{border-bottom:1px solid var(--acct-line)}
+.account-recent a{display:flex;align-items:center;gap:12px;padding:12px 2px;color:var(--m-ink);text-decoration:none}
+.account-recent-icon{display:inline-flex;flex:none;padding:8px;border-radius:10px;background:var(--m-chip)}
+.account-recent-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.account-recent-text strong{font-size:calc(14px * var(--font-scale,1));font-weight:600}
+.account-recent-text small{color:var(--m-muted);font-size:calc(13px * var(--font-scale,1));overflow-wrap:anywhere}
+.account-recent .history-status{margin-left:auto;flex:none;border-radius:4px;padding:4px 7px;white-space:nowrap}
+.account-recent a>svg{flex:none;color:var(--m-muted)}
+.account-recent>.fine-print{margin:4px 0!important}
 
 /* Reduced motion, last so it outranks every animation above: the OS setting and AERO's own Reduce motion setting give the same stills.
    Map camera moves read both in components/drone.tsx prefersReducedMotion. */
-@media(prefers-reduced-motion:reduce){.ux-progress span.active i,.ux-match-progress i{animation:none;width:100%;opacity:.5}.ux-chip.live i,.ux-courier-state i.flying,.fleet-dot.live{animation:none}.ux-sheet{transition:none}.match-pulse i{animation:none;opacity:.55;transform:scale(.7)}}
+@media(prefers-reduced-motion:reduce){.ux-progress span.active i,.ux-match-progress i{animation:none;width:100%;opacity:.5}.ux-chip.live i,.ux-courier-state i.flying,.fleet-dot.live{animation:none}.ux-sheet{transition:none}.match-pulse i{animation:none;opacity:.55;transform:scale(.7)}.spin{animation:none}}
 body[data-motion=true] :is(.ux-progress span.active i,.ux-match-progress i){animation:none;width:100%;opacity:.5}
+body[data-motion=true] .spin{animation:none}
 body[data-motion=true] :is(.ux-chip.live i,.ux-courier-state i.flying,.fleet-dot.live){animation:none}
 body[data-motion=true] .ux-sheet{transition:none}
 body[data-motion=true] .match-pulse i{animation:none;opacity:.55;transform:scale(.7)}

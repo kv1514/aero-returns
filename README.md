@@ -178,7 +178,7 @@ OAuth uses PKCE S256, a one-time ten-minute state tied to the AERO owner and an 
 
 The **3D & Street View** tile opens a 3D explorer with pickup, current drone position, and hub (or live drop pad) camera targets, plus an optional orbit. With a Google key it uses Google's photorealistic 3D tiles; without one, or if they fail, it uses free OpenFreeMap Liberty tiles with OpenStreetMap 3D buildings. Google Earth and Street View open at the selected coordinates in separate tabs. Street View uses Google's key-free Maps URLs, so no paid panorama API is enabled. Imagery is recorded and is not live drone footage.
 
-**Your account** has Supabase-backed Google and Amazon sign-in. Supabase is not configured on the Worker, so those buttons stay disabled there and no live social login is claimed; the demo account and guest sessions work. See [`docs/ACCOUNTS.md`](docs/ACCOUNTS.md) for callbacks, the Amazon userinfo adapter, and ownership/security behavior.
+**Your account** has Supabase-backed Google and Amazon sign-in, plus email + password sign-up and sign-in (`SUPABASE_EMAIL_ENABLED`). Accounts are stored by Supabase; each account's returns stay in AERO's D1, scoped to its verified user ID, and the account panel lists its recent returns. Supabase is not configured on the Worker, so those sign-in options stay off there and no live login is claimed; the demo account and guest sessions work. See [`docs/ACCOUNTS.md`](docs/ACCOUNTS.md) for callbacks, the Amazon userinfo adapter, and ownership/security behavior.
 
 ## Visual pickup reference
 

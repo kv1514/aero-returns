@@ -11,8 +11,10 @@ export type HomeScene = { pickup: Point; label: string; drones: { id: string; na
 export type MapProps = { record: ReturnRecord | null; scene?: HomeScene | null; clockOffset: number; stale: boolean; frozenAt: number; booking: boolean; onPin: (p: [number,number]) => void };
 const line = (coordinates: number[][]) => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates } });
 // Same breakpoint as @media(max-width:760px): the sheet covers the bottom 46dvh on phones and the left 400px on desktop.
+// Phones keep marker labels (centred on their pins) clear of the screen edge and the map-control column on the right, and keep
+// pins and the labels under them above the Demo controls float (12–56px above the sheet), so the drop-off name is not hidden.
 const mobile = () => window.innerWidth <= 760;
-const sheetPadding = () => mobile() ? {left:40,right:40,top:120,bottom:Math.round(window.innerHeight*.46)+30} : {left:470,right:90,top:130,bottom:90};
+const sheetPadding = () => mobile() ? {left:72,right:110,top:120,bottom:Math.min(Math.round(window.innerHeight*.46)+100,Math.max(30,window.innerHeight-180))} : {left:470,right:90,top:130,bottom:90};
 // Follow frames the drone with a per-ease offset; easeTo padding would persist on the transform and shrink every later fitBounds.
 const followOffset = (): [number, number] => mobile() ? [0,-125] : [175,0];
 const scenePoints = (scene: HomeScene): Point[] => [scene.pickup, ...scene.drones.map(d => d.base)];

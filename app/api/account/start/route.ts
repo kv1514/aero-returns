@@ -1,12 +1,13 @@
 import {accountClient,accountConfig} from '@/lib/supabase-server';
 import {allowedProvider,sameOrigin} from '@/lib/account-policy';
-import {unsupported} from '@/lib/http';
+import {readBody,unsupported} from '@/lib/http';
 export const dynamic='force-dynamic';
 const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'private, no-store'}});
 export async function POST(request:Request){
   if(!sameOrigin(request))return reply({error:'Start sign-in from AERO.'},403);
   try{
-    const raw=await request.text();if(raw.length>200)return reply({error:'Invalid sign-in request.'},400);
+    // Over 200 bytes is refused without reading the rest (a chunked body has no Content-Length to check first).
+    const raw=await readBody(request,201);if(raw===null)return reply({error:'Invalid sign-in request.'},400);
     const provider=(JSON.parse(raw) as {provider?:unknown}).provider;
     if(!allowedProvider(provider))return reply({error:'Unsupported sign-in provider.'},400);
     const config=accountConfig();
