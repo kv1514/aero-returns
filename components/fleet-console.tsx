@@ -31,7 +31,7 @@ export default function FleetConsole() {
   const [returns, setReturns] = useState<ReturnRecord[]>([]), [returnId, setReturnId] = useState(''), [registering, setRegistering] = useState(false), [secret, setSecret] = useState<{ drone: Drone; key: string } | null>(null);
   const [placing, setPlacing] = useState<PadKey | null>(null), [nudgePad, setNudgePad] = useState<PadKey>('pickupPad'), [busy, setBusy] = useState(false), [notice, setNotice] = useState<{ tone: 'error' | 'ok'; text: string } | null>(null), [checks, setChecks] = useState<Record<string, boolean>>({}), [confirmDelete, setConfirmDelete] = useState(false);
   // pinZone: the pin landing zone being typed (null shows the saved value); askClear: a takeoff from the ground away from home waiting for the operator's yes.
-  const [confirmRotate, setConfirmRotate] = useState(false), [pinZone, setPinZone] = useState<string | null>(null), [askClear, setAskClear] = useState<{ body: object; success: string } | null>(null);
+  const [confirmRotate, setConfirmRotate] = useState(false), [pinZone, setPinZone] = useState<string | null>(null), [cruise, setCruise] = useState<string | null>(null), [askClear, setAskClear] = useState<{ body: object; success: string } | null>(null);
   const say = (tone: 'error' | 'ok', text: string) => setNotice({ tone, text });
   const [failures, setFailures] = useState(0), offline = failures >= 3, [listError, setListError] = useState('');
   // When the last drone answer arrived on this device, and a clock that ticks while the link is down (see `seen` below).
@@ -45,7 +45,7 @@ export default function FleetConsole() {
     void tick();
     const t = setInterval(() => void tick(), 5000); return () => clearInterval(t);
   }, [applyList]);
-  function choose(id: string) { setSelected(id); setChecks({}); setPlacing(null); setNotice(null); setPinZone(null); setAskClear(null); }
+  function choose(id: string) { setSelected(id); setChecks({}); setPlacing(null); setNotice(null); setPinZone(null); setCruise(null); setAskClear(null); }
   useEffect(() => {
     if (!selected) return;
     let active = true;
@@ -102,6 +102,11 @@ export default function FleetConsole() {
     if (!pinZone?.trim() || !(n >= 0 && n <= LIMITS.maxPinRadius)) { say('error', `The pin landing zone must be 0–${LIMITS.maxPinRadius} m from the pickup pad (0 = always use the pad).`); return; }
     void patch({ action: 'config', pinRadius: n }, n ? `Pins within ${fmtMeters(n)} of the pickup pad. Re-arm with the checklist.` : 'Pins off: every pickup uses the pickup pad. Re-arm with the checklist.').then(ok => { if (ok) setPinZone(null); });
   }
+  function saveCruise(maxAlt: number) {
+    const n = Number(cruise);
+    if (!cruise?.trim() || !(n >= LIMITS.minCruise && n <= maxAlt)) { say('error', `Cruise altitude must be ${LIMITS.minCruise}–${maxAlt} m (the maximum altitude).`); return; }
+    void patch({ action: 'config', cruiseAlt: n }, `Cruise altitude ${n} m: takeoffs and flights use it from now on. Re-arm with the checklist.`).then(ok => { if (ok) setCruise(null); });
+  }
   const linkState = !d ? '' : offline ? 'stale' : !d.lastSeen ? 'waiting' : d.stale ? 'stale' : 'live';
   // Connectivity, not configuration: shown in the sticky header (a sticky bar on phones) so it stays in view at the controls.
   const warn = !!d && linkState === 'stale', lastKnown = !!t && warn;
@@ -157,6 +162,11 @@ export default function FleetConsole() {
               <label>Land at customer pins within <input type="number" inputMode="decimal" min={0} max={LIMITS.maxPinRadius} step="any" value={pinZone ?? String(pinRadius)} disabled={!!mission || busy} onChange={e => setPinZone(e.target.value)} /> m of the pickup pad (0 = always use the pad)</label>
               <button disabled={!!mission || busy || pinZone === null || Number(pinZone) === pinRadius}>Save</button>
             </form>
+            <form className="fleet-pin-zone" onSubmit={e => { e.preventDefault(); saveCruise(d.config.maxAlt); }}>
+              <label>Cruise altitude <input type="number" inputMode="decimal" min={LIMITS.minCruise} max={d.config.maxAlt} step="any" value={cruise ?? String(d.config.cruiseAlt)} disabled={!!mission || busy} onChange={e => setCruise(e.target.value)} /> m: how high it takes off and flies ({LIMITS.minCruise}–{d.config.maxAlt} m)</label>
+              <button disabled={!!mission || busy || cruise === null || Number(cruise) === d.config.cruiseAlt}>Save</button>
+            </form>
+            {d.config.cruiseAlt < 10 && <p className="fleet-hint fleet-landing"><TriangleAlert size={14} /><span>Low test altitude: at {d.config.cruiseAlt} m the drone flies at about head height, so keep everyone well clear. ABORT and Return home use the flight controller’s own return altitude (ArduPilot RTL_ALT), not this setting.</span></p>}
             <div className="fleet-row-buttons">{(['home', 'pickupPad', 'dropPad'] as PadKey[]).map(k => <button key={k} disabled={!t || d.stale || !!mission || busy} onClick={() => void patch({ action: 'pad-from-drone', pad: k }, 'Pad set from the drone’s position.')}><LocateFixed size={14} />{k === 'home' ? 'Home' : k === 'pickupPad' ? 'Pickup' : 'Drop'} = drone</button>)}</div>
             {(['pickupPad', 'dropPad'] as const).map(k => <div key={k} className="fleet-row-buttons fleet-ahead"><span>{k === 'pickupPad' ? 'Pickup' : 'Drop'} ahead of the nose</span>{[2, 5, 10].map(m => <button key={m} disabled={!t || d.stale || !!mission || busy} onClick={() => t && void patch({ action: 'config', [k]: pointAhead(t, m) }, `${k === 'pickupPad' ? 'Pickup' : 'Drop'} pad set ${m} m ahead of the drone's nose. Re-arm with the checklist.`)}><Navigation size={14} />{m} m</button>)}</div>)}
             <div className="fleet-row-buttons fleet-ahead fleet-nudge"><label><span>Nudge</span><select value={nudgePad} onChange={e => setNudgePad(e.target.value as PadKey)} aria-label="Pad to nudge">{(['pickupPad', 'dropPad', 'home'] as PadKey[]).map(k => <option key={k} value={k}>{PAD_NAME[k]}</option>)}</select></label>{([['north', 1, 0, ArrowUp], ['south', -1, 0, ArrowDown], ['west', 0, -1, ArrowLeft], ['east', 0, 1, ArrowRight]] as const).map(([dir, n, e, Icon]) => { const at = d.config[nudgePad]; return <button key={dir} aria-label={`Move the ${PAD_NAME[nudgePad].toLowerCase()} 1 m ${dir}`} title={`1 m ${dir}`} disabled={!at || !!mission || busy} onClick={() => at && void patch({ action: 'config', [nudgePad]: pointOffset(at, n, e) }, `${PAD_NAME[nudgePad]} moved 1 m ${dir}. Re-arm with the checklist.`)}><Icon size={16} /></button>; })}<small>1 m per tap</small></div>
@@ -249,7 +259,7 @@ function RegisterForm({ onDone }: { onDone: (drone: Drone, key: string) => void 
     {form.transport === 'sms' && <label>Drone SIM phone number<input required value={form.phone} onChange={set('phone')} placeholder="+15105550123" inputMode="tel" /></label>}
     <div className="fleet-form-row"><label>Home latitude<input required type="number" step="any" min={-90} max={90} value={form.lat} onChange={set('lat')} placeholder="37.8719" /></label><label>Home longitude<input required type="number" step="any" min={-180} max={180} value={form.lng} onChange={set('lng')} placeholder="-122.2595" /></label></div>
     <button type="button" className="ux-secondary" onClick={locate}><LocateFixed size={16} />Use my current location</button>
-    <div className="fleet-form-row three"><label>Geofence (m)<input required type="number" min={20} max={2000} value={form.radius} onChange={set('radius')} /></label><label>Max alt (m)<input required type="number" min={10} max={120} value={form.maxAlt} onChange={set('maxAlt')} /></label><label>Cruise (m)<input required type="number" min={10} max={120} value={form.cruiseAlt} onChange={set('cruiseAlt')} /></label></div>
+    <div className="fleet-form-row three"><label>Geofence (m)<input required type="number" min={20} max={2000} value={form.radius} onChange={set('radius')} /></label><label>Max alt (m)<input required type="number" min={LIMITS.minCruise} max={LIMITS.maxAlt} step="any" value={form.maxAlt} onChange={set('maxAlt')} /></label><label>Cruise (m)<input required type="number" min={LIMITS.minCruise} max={LIMITS.maxAlt} step="any" value={form.cruiseAlt} onChange={set('cruiseAlt')} /></label></div>
     <p className="fleet-hint">Set the pickup and drop pads on the map after registering. 120 m (400 ft) is the hard altitude cap.</p>
     {error && <div className="fleet-notice error" role="alert"><TriangleAlert size={16} /><span>{error}</span></div>}
     <button className="ux-primary" disabled={busy}>{busy ? 'Registering…' : 'Register drone'}</button>

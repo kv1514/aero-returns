@@ -99,3 +99,12 @@ test('nudging a pad moves it 1 m in the chosen compass direction', async () => {
     assert.ok(Math.abs(((bearing(p, q) - dir + 540) % 360) - 180) < 0.5);
   }
 });
+test('cruise altitude can go down to the bridge’s 2 m minimum, never below and never above the max', async () => {
+  const { configProblem, LIMITS } = await import('../lib/drone-mission');
+  const c = { home: [-122.2595, 37.8719] as Point, pickupPad: null, dropPad: null, radius: 300, maxAlt: 15, cruiseAlt: 2 };
+  assert.equal(LIMITS.minCruise, 2);
+  assert.equal(configProblem(c), null);
+  assert.match(configProblem({ ...c, cruiseAlt: 1.9 })!, /Cruise altitude/);
+  assert.match(configProblem({ ...c, cruiseAlt: 16 })!, /Cruise altitude/);
+  assert.match(configProblem({ ...c, maxAlt: 1, cruiseAlt: 1 })!, /Maximum altitude/);
+});

@@ -2,7 +2,8 @@
 import type { Ack, CommandType } from './drone-protocol';
 import { distance, handedOff, heldForPerson, HOLD_MESSAGE, STATE_TITLES, snapshot, type LiveFlight, type LiveTelemetry, type MissionPhase, type Point, type ReturnRecord } from './simulation';
 
-export const LIMITS = { maxRadius: 2000, maxAlt: 120, minCruise: 10, minBattery: 40, minSats: 6, maxDrones: 5, maxPinRadius: 100 };
+// minCruise matches the bridge's MIN_FLIGHT_ALT_M (2 m): below it the bridge rejects TAKEOFF/GOTO with ALTITUDE.
+export const LIMITS = { maxRadius: 2000, maxAlt: 120, minCruise: 2, minBattery: 40, minSats: 6, maxDrones: 5, maxPinRadius: 100 };
 export const ARM_WINDOW_MS = 30 * 60_000;
 export const STALE_MS = { https: 10_000, sms: 120_000 } as const;
 export const EXPIRY_S = { https: 30, sms: 300 } as const;
