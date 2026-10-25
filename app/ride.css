@@ -526,7 +526,7 @@ body[data-theme=dark] .ride-option .service-icon{background:#2c3b52;color:#cfe0f
   }
 }
 @media(max-width:480px){.modal .modal-shell .form-grid{grid-template-columns:1fr}}
-/* Narrow phones: the decorative arrow goes so "Request AERO Standard" fits on one line beside Back. */
+/* Narrow phones: the decorative arrow goes so "Request AirCart Standard" fits on one line beside Back. */
 @media(max-width:420px){.modal .modal-shell .wizard-footer .primary>svg{display:none}.modal .modal-shell .wizard-footer :is(.primary,.secondary){padding:6px 10px}}
 /* Your account: the email account form and the signed-in account's recent returns. Same dialog tokens, so light, dark, high contrast and Text size follow. */
 .account-panel{--acct-line:#dce4ee;--acct-field:#fff}

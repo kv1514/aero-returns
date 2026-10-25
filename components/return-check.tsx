@@ -29,7 +29,7 @@ export const sourceLabel = (r: Pick<ReturnCheckResult, 'source' | 'model'>) => [
 export const defaultDescription = (p: PackageInput) => `${p.retailer} return${p.returnReference?.trim() ? ` (reference ${p.returnReference.trim()})` : ''}. Item: `;
 export const VERDICT_TONE: Record<Verdict, 'green' | 'blue' | 'red' | 'amber'> = { fly_standard: 'green', fly_priority: 'blue', not_drone_eligible: 'red', needs_person: 'amber' };
 /** UI stages only: they describe what usually happens, not events reported by the server. */
-export const stagesFor = (photos: number) => [photos ? 'Reading your photos…' : 'Reading your description…', 'Checking AERO’s drone limits…', 'Deciding…'];
+export const stagesFor = (photos: number) => [photos ? 'Reading your photos…' : 'Reading your description…', 'Checking AirCart’s drone limits…', 'Deciding…'];
 const PERSON_CONFIDENCE = .85;
 
 export function checkProblem(description: string, productUrl: string, pkg: PackageInput) {
@@ -37,7 +37,7 @@ export function checkProblem(description: string, productUrl: string, pkg: Packa
   if (text.length < 3) return 'Describe the item in a few words first.';
   if (text === defaultDescription(pkg).trim()) return 'Add what the item is and its condition, for example “Wireless headphones, opened once”.';
   const problem = bookingProblem(pkg); if (problem) return `Finish the details above first. ${problem}`;
-  if (pkg.weight > 20 || pkg.dimensions.some(d => d > 150)) return 'Claude can check parcels up to 20 kg and 150 cm per side. This one is beyond every AERO drone, so booking a drone won’t work for it.';
+  if (pkg.weight > 20 || pkg.dimensions.some(d => d > 150)) return 'Claude can check parcels up to 20 kg and 150 cm per side. This one is beyond every AirCart drone, so booking a drone won’t work for it.';
   if (productUrl.trim()) { try { validProductURL(productUrl.trim()); } catch (e) { return e instanceof Error ? e.message : 'Use a public HTTPS product page.'; } }
   return '';
 }
@@ -99,19 +99,19 @@ export function whyNotEligible(e: Eligibility) {
 /** Why the server sent this to a person, using the same thresholds as gateDecision. */
 export function personReasons(d: AgentDecision) {
   const out: string[] = [];
-  if (d.confidence < PERSON_CONFIDENCE) out.push(`Claude was ${Math.round(d.confidence * 100)}% sure; AERO asks a person below ${PERSON_CONFIDENCE * 100}%.`);
+  if (d.confidence < PERSON_CONFIDENCE) out.push(`Claude was ${Math.round(d.confidence * 100)}% sure; AirCart asks a person below ${PERSON_CONFIDENCE * 100}%.`);
   if (!d.matchesDescription) out.push('The photos may not match your description.');
   if (d.condition === 'damaged') out.push('The item may be damaged.');
   if (d.condition === 'unknown') out.push('Its condition couldn’t be judged from what you shared.');
-  return out.length ? out : ['Claude saw something AERO’s size rules don’t cover, so a person decides.'];
+  return out.length ? out : ['Claude saw something AirCart’s size rules don’t cover, so a person decides.'];
 }
-const TOOL_TITLE: Record<string, string> = { check_drone_eligibility: 'Checked AERO’s drone limits', lookup_product_specs: 'Looked up the product page' };
+const TOOL_TITLE: Record<string, string> = { check_drone_eligibility: 'Checked AirCart’s drone limits', lookup_product_specs: 'Looked up the product page' };
 export type StepView = { title: string; by: string; used: string[]; results: string[] };
 /** Plain-language view of one tool call: what it used and what came back, per tier for the limit check. */
 export function describeStep(step: AgentStep, entered?: PackageInput): StepView {
   const input = rec(step.input), output = rec(step.output), error = str(output.error);
   const byServer = input.by === 'server';
-  const view: StepView = { title: TOOL_TITLE[step.tool] || step.tool.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()), by: byServer ? 'AERO ran this itself because Claude skipped it' : 'Claude asked · AERO ran it', used: [], results: [] };
+  const view: StepView = { title: TOOL_TITLE[step.tool] || step.tool.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()), by: byServer ? 'AirCart ran this itself because Claude skipped it' : 'Claude asked · AirCart ran it', used: [], results: [] };
   if (step.tool === 'check_drone_eligibility') {
     const kg = num(input.weightKg), dims = triple(input.dimensionsCm);
     if (kg !== null) view.used.push(`${fmt(kg)} kg`);
@@ -185,7 +185,7 @@ export default function ReturnCheck({ pkg, result, onResult, onService, onBusy, 
   function stopTimers() { const l = live.current; l.timers.forEach(clearTimeout); l.timers = []; }
   /** Booking shows on Review whether a check is still running. */
   function running(on: boolean) { setBusy(on); onBusy?.(on); }
-  function stop() { const l = live.current, c = l.controller; l.controller = null; c?.abort(); stopTimers(); running(false); setNotice('Stopped waiting. The check may still finish on AERO’s server and counts toward the hourly limit.'); }
+  function stop() { const l = live.current, c = l.controller; l.controller = null; c?.abort(); stopTimers(); running(false); setNotice('Stopped waiting. The check may still finish on AirCart’s server and counts toward the hourly limit.'); }
   async function check() {
     const problem = checkProblem(description, url, pkg); if (problem) { setError(problem); return; }
     const l = live.current; l.controller?.abort(); stopTimers();
@@ -201,11 +201,11 @@ export default function ReturnCheck({ pkg, result, onResult, onService, onBusy, 
       if (l.controller !== controller) return; // stopped, replaced, or the dialog closed
       if (!res.ok) { const f = failureFor(res.status, data); if (f.setup) setSetup('missing'); else setError(f.message); return; }
       const parsed = parseAgentResponse(data, key, Date.now());
-      if (!parsed) { setError('AERO got an incomplete answer from the check. Try again, or book with your details.'); return; }
+      if (!parsed) { setError('AirCart got an incomplete answer from the check. Try again, or book with your details.'); return; }
       setSetup('ready'); onResult({ ...parsed, evidenceChanged: l.rev !== rev });
     } catch {
       if (l.controller !== controller) return;
-      setError(timedOut ? 'The check took more than two minutes, so AERO stopped waiting. Try again, or book with your details. The check is optional.' : 'Could not reach AERO. Check your connection and try again.');
+      setError(timedOut ? 'The check took more than two minutes, so AirCart stopped waiting. Try again, or book with your details. The check is optional.' : 'Could not reach AirCart. Check your connection and try again.');
     } finally {
       if (l.controller === controller) { l.controller = null; stopTimers(); running(false); }
     }
@@ -225,7 +225,7 @@ export default function ReturnCheck({ pkg, result, onResult, onService, onBusy, 
       <ChevronDown className="rc-chev" size={18} aria-hidden="true"/>
     </button>
     <div id={`${id}-body`} className="rc-body" hidden={!open}>
-      {setup === 'missing' ? <div className="rc-setup"><Info size={18} aria-hidden="true"/><div><strong>Claude check isn’t switched on for this AERO server</strong><p>It needs an Anthropic API key, set as the server secret <code>ANTHROPIC_API_KEY</code>. Nothing else changes: book with the details above, and AERO’s drone limits still decide which drone can fly.</p></div></div> : <>
+      {setup === 'missing' ? <div className="rc-setup"><Info size={18} aria-hidden="true"/><div><strong>Claude check isn’t switched on for this AirCart server</strong><p>It needs an Anthropic API key, set as the server secret <code>ANTHROPIC_API_KEY</code>. Nothing else changes: book with the details above, and AirCart’s drone limits still decide which drone can fly.</p></div></div> : <>
         {/* Hints sit outside the <label> so they are read once, as descriptions, not as part of the field's name. */}
         <div className="rc-field"><label htmlFor={`${id}-desc`}>What are you returning?</label><textarea id={`${id}-desc`} rows={3} maxLength={1000} value={description} aria-describedby={`${id}-desc-hint`} onChange={e => { setText(e.target.value); touched(); }}/><span className="rc-hint" id={`${id}-desc-hint`}>Say what the item is and its condition, for example “Wireless headphones, opened once, original box”.</span></div>
         <div className="rc-field" role="group" aria-labelledby={`${id}-photos`}>
@@ -241,7 +241,7 @@ export default function ReturnCheck({ pkg, result, onResult, onService, onBusy, 
           <input ref={picker} type="file" accept="image/*" multiple hidden onChange={e => { void addPhotos(e.target.files); e.target.value = ''; }}/>
         </div>
         <div className="rc-field"><label htmlFor={`${id}-url`}>Product page link <span className="rc-hint">(optional)</span></label><input id={`${id}-url`} type="url" inputMode="url" placeholder="https://www.amazon.com/…" value={url} aria-describedby={`${id}-url-hint`} onChange={e => { setUrl(e.target.value); touched(); }}/><span className="rc-hint" id={`${id}-url-hint`}>Amazon, Nike, Zara, Walmart, Target, Best Buy or REI. {lookup === false ? 'Product lookup isn’t set up on this server, so Claude relies on your measurements.' : 'Claude can compare published specs with your packed measurements.'}</span></div>
-        <p className="rc-fine">“Check my return” sends your description, photos and package details to Anthropic’s Claude API. AERO keeps the verdict and Claude’s short explanation, not your photos or description.</p>
+        <p className="rc-fine">“Check my return” sends your description, photos and package details to Anthropic’s Claude API. AirCart keeps the verdict and Claude’s short explanation, not your photos or description.</p>
         <button type="button" className="ux-primary" disabled={busy || preparing} onClick={() => void check()}>{busy ? <LoaderCircle className="spin" size={18} aria-hidden="true"/> : <Sparkles size={18} aria-hidden="true"/>}{busy ? 'Checking your return…' : result ? 'Check again' : 'Check my return'}</button>
         {busy && <div className="rc-running"><ol className="rc-progress" aria-label="Check progress">{stages.map((s, i) => <li key={s} className={i < stage ? 'done' : i === stage ? 'now' : ''}><i aria-hidden="true">{i < stage ? <Check size={12}/> : i === stage ? <LoaderCircle className="spin" size={12}/> : null}</i>{s}</li>)}</ol><p className="rc-fine">These steps show what usually happens. Claude’s actual steps appear under “How Claude decided”. You can keep booking while this runs.</p><button type="button" className="rc-text" onClick={stop}>Stop waiting</button></div>}
       </>}
@@ -255,7 +255,7 @@ export default function ReturnCheck({ pkg, result, onResult, onService, onBusy, 
           <div className="rc-verdict"><span className="rc-badge"><i aria-hidden="true"/>{VERDICT_LABEL[d.verdict]}</span><span className="rc-meta">{Math.round(d.confidence * 100)}% confidence · {(CONDITION_LABEL[d.condition] ?? 'Condition unclear').toLowerCase()} · {d.matchesDescription ? 'matches your description' : 'may not match your description'}</span></div>
           <p className="rc-explain">{d.explanation}</p>
           {/* Booking re-keys the result on a service change only when the limit check allows that tier, so it stays attached. */}
-          {fresh && d.verdict === 'fly_priority' && (pkg.service === 'standard' ? <div className="rc-action tone-blue"><Zap size={18} aria-hidden="true"/><div><strong>{result.eligibility.standard.eligible ? 'Claude suggests AERO Priority. Standard also fits AERO’s limits.' : 'This package fits AERO Priority, not Standard.'}</strong><p>Priority carries up to {result.eligibility.limits.priority.maxKg} kg and {result.eligibility.limits.priority.maxSideCm} cm per side ($3 demo upgrade, nothing is charged).</p></div><button type="button" className={`${result.eligibility.standard.eligible ? 'ux-secondary' : 'ux-primary'} rc-small`} onClick={() => onService('priority')}>Switch to Priority</button></div> : <div className="rc-action tone-blue"><Check size={18} aria-hidden="true"/><div><strong>Priority is selected, so this package can fly.</strong></div></div>)}
+          {fresh && d.verdict === 'fly_priority' && (pkg.service === 'standard' ? <div className="rc-action tone-blue"><Zap size={18} aria-hidden="true"/><div><strong>{result.eligibility.standard.eligible ? 'Claude suggests AirCart Priority. Standard also fits AirCart’s limits.' : 'This package fits AirCart Priority, not Standard.'}</strong><p>Priority carries up to {result.eligibility.limits.priority.maxKg} kg and {result.eligibility.limits.priority.maxSideCm} cm per side ($3 demo upgrade, nothing is charged).</p></div><button type="button" className={`${result.eligibility.standard.eligible ? 'ux-secondary' : 'ux-primary'} rc-small`} onClick={() => onService('priority')}>Switch to Priority</button></div> : <div className="rc-action tone-blue"><Check size={18} aria-hidden="true"/><div><strong>Priority is selected, so this package can fly.</strong></div></div>)}
           {fresh && d.verdict === 'fly_standard' && <div className="rc-action tone-green"><Check size={18} aria-hidden="true"/><div><strong>{pkg.service === 'priority' ? 'Standard would also fit. Priority is still fine.' : 'Standard fits this package.'}</strong></div></div>}
           {fresh && d.verdict === 'not_drone_eligible' && <div className="rc-action tone-red"><TriangleAlert size={18} aria-hidden="true"/><div><strong>Booking a drone won’t work for this package.</strong><ul>{whyNotEligible(result.eligibility).map(w => <li key={w.tier}>{w.tier} ({w.limits}): {w.reasons.join('; ') || 'no compatible facility'}</li>)}</ul><p>If a measurement above is wrong, fix it and check again. If you book with this check, a person reviews the return before any drone flies; otherwise use your retailer’s usual drop-off.</p></div></div>}
           {fresh && d.verdict === 'needs_person' && <div className="rc-action tone-amber"><UserRound size={18} aria-hidden="true"/><div><strong>{PERSON_NOTE}</strong><ul>{personReasons(d).map(r => <li key={r}>{r}</li>)}</ul><p>You can still book.{d.questions.length ? ' Have answers to the questions below ready.' : ''}</p></div></div>}
@@ -264,9 +264,9 @@ export default function ReturnCheck({ pkg, result, onResult, onService, onBusy, 
           <div className="rc-merchant"><Store size={18} aria-hidden="true"/><div><span className="rc-label">Suggested next step for the merchant</span><strong>{DISPOSITION_LABEL[d.disposition]}</strong><p>{DISPOSITION_NOTE[d.disposition]} Advisory; the retailer decides.</p></div></div>
           <details className="rc-trace"><summary>How Claude decided</summary><ol className="rc-steps">
             {result.steps.map((s, i) => { const v = describeStep(s, pkg); return <li key={i}><strong>{v.title}</strong><span className="rc-by">{v.by}</span>{v.used.length > 0 && <p><span className="rc-label-inline">Used:</span> {v.used.join(' · ')}</p>}{v.results.map((r, j) => <p key={j}>{r}</p>)}</li>; })}
-            <li><strong>Claude decided, then AERO’s rules checked it</strong><span className="rc-by">AERO server gate</span><p>The verdict can’t fly a package the limit check rules out. Anything under {PERSON_CONFIDENCE * 100}% confidence, a description mismatch, damage or an unknown condition goes to a person.</p><p>Final: {VERDICT_LABEL[d.verdict]} · {Math.round(d.confidence * 100)}%</p></li>
+            <li><strong>Claude decided, then AirCart’s rules checked it</strong><span className="rc-by">AirCart server gate</span><p>The verdict can’t fly a package the limit check rules out. Anything under {PERSON_CONFIDENCE * 100}% confidence, a description mismatch, damage or an unknown condition goes to a person.</p><p>Final: {VERDICT_LABEL[d.verdict]} · {Math.round(d.confidence * 100)}%</p></li>
           </ol></details>
-          <p className="rc-fine">{fresh ? 'Attached to your booking when you confirm: AERO saves the verdict and explanation with the return. ' : ''}Advisory only. It doesn’t approve a retailer return or refund, and it doesn’t clear a flight.</p>
+          <p className="rc-fine">{fresh ? 'Attached to your booking when you confirm: AirCart saves the verdict and explanation with the return. ' : ''}Advisory only. It doesn’t approve a retailer return or refund, and it doesn’t clear a flight.</p>
         </div>
       </div>}
     </div>

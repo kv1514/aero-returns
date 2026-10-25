@@ -31,7 +31,7 @@ test('map markers call a live pin pickup “Your pin”, a pad “Pickup pad”,
 
 test('history never shows the simulated hub for a live return, and says which kind each row is', () => {
   assert.equal(historyPlace(live('COMPLETE', 'pin', true)), 'Drop pad · Live flight');
-  assert.equal(historyPlace(sim), 'AERO Downtown Hub · Simulated');
+  assert.equal(historyPlace(sim), 'AirCart Downtown Hub · Simulated');
 });
 
 test('after a person decides a held return, the customer sees that decision instead of “A person needs to check”', () => {
@@ -43,6 +43,6 @@ test('after a person decides a held return, the customer sees that decision inst
   assert.equal(checkLabel({ ...review, declinedAt: t0 + 60_000 }, time), 'Declined by a person at 2026-10-24T19:01:00.000Z');
 });
 
-test('the installed app’s status bar follows AERO’s own theme', () => {
+test('the installed app’s status bar follows AirCart’s own theme', () => {
   assert.deepEqual([statusBarColor('dark'), statusBarColor('light'), statusBarColor(undefined)], ['#141414', '#ffffff', '#ffffff']);
 });

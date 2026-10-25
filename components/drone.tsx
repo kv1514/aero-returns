@@ -2,7 +2,7 @@ import { useId } from 'react';
 import type { ReturnRecord } from '@/lib/simulation';
 export function DroneIllustration({ className = '', compact = false }: { className?: string; compact?: boolean }) {
   const id = useId().replace(/:/g, '');
-  return <svg className={className} viewBox="0 0 380 220" fill="none" role="img" aria-label="AERO quadcopter with a secure return package">
+  return <svg className={className} viewBox="0 0 380 220" fill="none" role="img" aria-label="AirCart quadcopter with a secure return package">
     <defs>
       <linearGradient id={`${id}-body`} x1="140" y1="78" x2="230" y2="140" gradientUnits="userSpaceOnUse"><stop stopColor="#fff"/><stop offset=".5" stopColor="#e8eef3"/><stop offset="1" stopColor="#99a7b9"/></linearGradient>
       <linearGradient id={`${id}-arm`} x1="90" y1="65" x2="280" y2="157"><stop stopColor="#d7dfe8"/><stop offset=".5" stopColor="#a6b4c5"/><stop offset="1" stopColor="#46576b"/></linearGradient>
@@ -36,7 +36,7 @@ export function DroneIllustration({ className = '', compact = false }: { classNa
       <path d="m185 128 17 6 9-3v10l-9 4-17-8v-9Z" fill="#17283f"/>
       <circle cx="200" cy="136" r="3" fill="#397efd"/>
       <path d="m151 105 6 3m68 13 5-2" stroke="#4be3a3" strokeWidth="3" strokeLinecap="round"/>
-      <text x="179" y="85" fontSize="8" letterSpacing="2" fontWeight="800" fill="#33445c" transform="rotate(9 179 85)">AERO</text>
+      <text x="176" y="85" fontSize="8" letterSpacing="1" fontWeight="800" fill="#33445c" transform="rotate(9 176 85)">AirCart</text>
     </g>
   </svg>;
 }
@@ -45,7 +45,7 @@ export const droneMarkerSvg = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.o
 export const prefersReducedMotion = () => typeof document !== 'undefined' && (document.body?.dataset.motion === 'true' || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches));
 /** Accessible names for map markers, set before MapLibre adds them so it keeps them instead of announcing an unnamed "Map marker" button. */
 export const fleetMarkerName = (name: string, nearest: boolean) => `Simulated drone ${name}${nearest ? ', nearest to your pickup' : ''}`;
-export const flightDroneName = (r: Pick<ReturnRecord, 'live' | 'drone'>) => `${r.live ? 'Live drone' : 'Simulated drone'} ${r.live?.droneName || r.drone?.name || 'AERO–104'}`;
+export const flightDroneName = (r: Pick<ReturnRecord, 'live' | 'drone'>) => `${r.live ? 'Live drone' : 'Simulated drone'} ${r.live?.droneName || r.drone?.name || 'AirCart–104'}`;
 /** The pickup marker: a live flight lands at the customer's pin or the operator's pad; a simulation keeps "Your pickup". */
 export const pickupLabel = (record: Pick<ReturnRecord, 'live'> | null) => !record?.live ? 'Your pickup' : record.live.pickupSource === 'pin' ? 'Your pin' : 'Pickup pad';
 /** The keyless map's words for a return: like the Google map, a live flight is never called a simulation. */

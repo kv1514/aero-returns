@@ -6,7 +6,7 @@ export const dynamic='force-dynamic';
 const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'private, no-store'}});
 export async function GET(request:Request){
   try{if(demoIdentity(request.headers.get('cookie')))return reply({...accountConfig(),demo:true,user:{id:'demo',email:'',name:'Alex Demo'}});
-    const account=await verifiedAccount();return reply({...accountConfig(),demo:false,user:account?{id:account.user.id,email:account.user.email||'',name:typeof account.user.user_metadata?.name==='string'?account.user.user_metadata.name:account.user.email||'AERO member'}:null});}
+    const account=await verifiedAccount();return reply({...accountConfig(),demo:false,user:account?{id:account.user.id,email:account.user.email||'',name:typeof account.user.user_metadata?.name==='string'?account.user.user_metadata.name:account.user.email||'AirCart member'}:null});}
   catch{const extra={...accountConfig(),user:null};return demoMode(request.headers.get('cookie'))?sessionFailure(request,extra):reply({...extra,error:'Your account session needs attention. Sign out and try again.',sessionError:true},401);}
 }
 export async function DELETE(request:Request){

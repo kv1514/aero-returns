@@ -82,7 +82,7 @@ export default function FlightMap({ record, scene = null, clockOffset, stale, fr
               heading += (((s.heading-heading+540)%360)-180)*.09;
               const graphic=el.querySelector<HTMLElement>('.drone-graphic');if(graphic)graphic.style.transform=`rotate(${heading}deg)`;
               if(ts-lastRoute>100){
-                label.textContent=r.live?.droneName||r.drone?.name||'AERO–104';const name=flightDroneName(r);if(el.getAttribute('aria-label')!==name)el.setAttribute('aria-label',name);
+                label.textContent=r.live?.droneName||r.drone?.name||'AirCart–104';const name=flightDroneName(r);if(el.getAttribute('aria-label')!==name)el.setAttribute('aria-label',name);
                 (m.getSource('route') as GeoJSONSource)?.setData(line([...s.path.inbound,...s.path.outbound.slice(1)]));
                 const completed=s.outbound?[...s.path.inbound,...s.completed.slice(1)]:s.completed;
                 (m.getSource('completed') as GeoJSONSource)?.setData(line(completed.length>1?completed:[...completed,...completed]));lastRoute=ts;

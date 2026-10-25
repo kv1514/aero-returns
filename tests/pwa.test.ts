@@ -30,8 +30,8 @@ type Startup = { url: string; media: string };
 const startup = layout ? (layout.metadata.appleWebApp as { startupImage: Startup[] }).startupImage : [];
 
 test('manifest has the install fields for iOS and Android', () => {
-  assert.equal(manifest.name, 'AERO — Returns, without the trip.');
-  assert.equal(manifest.short_name, 'AERO');
+  assert.equal(manifest.name, 'AirCart — Returns, without the trip.');
+  assert.equal(manifest.short_name, 'AirCart');
   for (const key of ['start_url', 'scope', 'id']) assert.equal(manifest[key], '/');
   assert.equal(manifest.display, 'standalone');
   assert.equal(manifest.orientation, 'portrait');
@@ -72,7 +72,7 @@ test('layout links the manifest, icons and home-screen settings', { skip }, () =
   assert.deepEqual(icons.apple.map(icon => [icon.url, icon.sizes]), [['/apple-touch-icon.png', '180x180']]);
   for (const icon of [...icons.icon, ...icons.apple]) assert.ok(existsSync(publicFile(icon.url)), icon.url);
   const apple = metadata.appleWebApp as { capable: boolean; title: string; statusBarStyle: string };
-  assert.deepEqual([apple.capable, apple.title], [true, 'AERO']);
+  assert.deepEqual([apple.capable, apple.title], [true, 'AirCart']);
   assert.ok(['default', 'black', 'black-translucent'].includes(apple.statusBarStyle));
   assert.deepEqual([viewport.width, viewport.initialScale, viewport.viewportFit], ['device-width', 1, 'cover']);
   const theme = viewport.themeColor as { media: string; color: string }[];
@@ -96,15 +96,15 @@ test('every current iPhone gets a portrait splash screen of the exact pixel size
 });
 
 test('server-rendered head carries the manifest, apple tags and viewport-fit, also on pages with their own metadata', { skip }, () => {
-  const merged = mergeMetadata([layout!.metadata as never, { title: 'AERO Fleet — live drone console' }]);
+  const merged = mergeMetadata([layout!.metadata as never, { title: 'AirCart Fleet — live drone console' }]);
   const head = renderToStaticMarkup(createElement(MetadataHead, { metadata: merged })) + renderToStaticMarkup(createElement(ViewportHead, { viewport: layout!.viewport as never }));
-  for (const tag of ['<link rel="manifest" href="/manifest.webmanifest"/>', '<link rel="apple-touch-icon" href="/apple-touch-icon.png" type="image/png" sizes="180x180"/>', '<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>', '<meta name="apple-mobile-web-app-capable" content="yes"/>', '<meta name="mobile-web-app-capable" content="yes"/>', '<meta name="apple-mobile-web-app-title" content="AERO"/>', 'name="apple-mobile-web-app-status-bar-style"', 'viewport-fit=cover', '<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"/>', '<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: dark)"/>']) assert.ok(head.includes(tag), tag);
+  for (const tag of ['<link rel="manifest" href="/manifest.webmanifest"/>', '<link rel="apple-touch-icon" href="/apple-touch-icon.png" type="image/png" sizes="180x180"/>', '<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>', '<meta name="apple-mobile-web-app-capable" content="yes"/>', '<meta name="mobile-web-app-capable" content="yes"/>', '<meta name="apple-mobile-web-app-title" content="AirCart"/>', 'name="apple-mobile-web-app-status-bar-style"', 'viewport-fit=cover', '<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"/>', '<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: dark)"/>']) assert.ok(head.includes(tag), tag);
   assert.equal(head.match(/rel="apple-touch-startup-image"/g)?.length, startup.length);
   assert.ok(head.includes(`<link rel="apple-touch-startup-image" href="/splash/iphone-1179x2556.png" media="${startup.find(image => image.url.endsWith('1179x2556.png'))!.media}"/>`));
-  assert.ok(head.includes('<title>AERO Fleet — live drone console</title>'));
+  assert.ok(head.includes('<title>AirCart Fleet — live drone console</title>'));
 });
 
-// Live tracking and drone telemetry must never come from a cache, so AERO installs without a service worker.
+// Live tracking and drone telemetry must never come from a cache, so AirCart installs without a service worker.
 test('no service worker is registered or shipped', () => {
   const files = (dir: string): string[] => readdirSync(dir).flatMap(name => { const path = join(dir, name); return statSync(path).isDirectory() ? files(path) : /\.(tsx?|jsx?|mjs)$/.test(name) ? [path] : []; });
   assert.deepEqual(['app', 'components', 'lib', 'hooks'].flatMap(files).filter(path => /serviceWorker\s*\.\s*register/.test(readFileSync(path, 'utf8'))), []);

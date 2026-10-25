@@ -1,4 +1,4 @@
-// Generates AERO's home-screen icons and iPhone splash screens from the brand mark. Usage: npm run pwa:assets
+// Generates AirCart's home-screen icons and iPhone splash screens from the brand mark. Usage: npm run pwa:assets
 // Writes PNGs into public/ (commit them). sharp is already installed through wrangler/miniflare; nothing is downloaded.
 // The splash list must match SPLASH in app/layout.tsx; tests/pwa.test.ts checks every linked file and its pixel size.
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -9,14 +9,6 @@ const INK = '#000000', BG = '#ffffff';
 // The header mark in components/aero-app.tsx (viewBox 0 0 30 30): the ink A with a background-coloured flight line cut through it.
 const MARK = `<path d="M2 25 12 4h6l10 21H19L15 14l-5 11Z" fill="${INK}"/><path d="m4 22 20-8" stroke="${BG}" stroke-width="2.5"/>`;
 const MARK_BOX = { x: 2, y: 4, w: 26, h: 21 };
-// "AERO" as plain geometry so the output never depends on installed fonts: cap height 100, heavy stems like the Inter Tight 800 header wordmark.
-const WORD = `<g fill="${INK}" fill-rule="evenodd">
-<path d="M0 100 30 0h24l30 100H60l-6-20H30l-6 20Zm35.4-38h13.2L42 40Z"/>
-<path d="M106 0h60v20h-37v20h33v19h-33v21h38v20h-61Z"/>
-<path d="M188 0h44a31 31 0 0 1 9.5 60.5L262 100h-25.5l-18-38H211v38h-23Zm23 20v22h21a11 11 0 0 0 0-22Z"/>
-<path d="M330 0a46 50 0 1 1 0 100a46 50 0 1 1 0-100Zm0 20a24 30 0 1 0 0 60a24 30 0 1 0 0-60Z"/>
-</g>`;
-const WORD_W = 376;
 
 const markAt = (cx, cy, width) => { const s = width / MARK_BOX.w; return `<g transform="translate(${cx - (MARK_BOX.x + MARK_BOX.w / 2) * s} ${cy - (MARK_BOX.y + MARK_BOX.h / 2) * s}) scale(${s})">${MARK}</g>`; };
 const svg = (w, h, body, view = `0 0 ${w} ${h}`) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${view}"><rect width="100%" height="100%" fill="${BG}"/>${body}</svg>`;
@@ -49,11 +41,10 @@ export const SPLASH = [
 /** @param {[number, number, number]} device */
 export const splashFile = ([w, h, r]) => `splash/iphone-${w * r}x${h * r}.png`;
 
-// Launch screen in points, rendered at device pixels: centred mark, wordmark below it, nothing that could read as live status.
+// Launch screen in points, rendered at device pixels: the centred mark only (no wordmark), nothing that could read as live status.
 function splashSvg([w, h, r]) {
-  const markW = 84, markH = markW * MARK_BOX.h / MARK_BOX.w, gap = 26, cap = 20, top = h / 2 - (markH + gap + cap) / 2;
-  const word = `<g transform="translate(${(w - WORD_W * cap / 100) / 2} ${top + markH + gap}) scale(${cap / 100})">${WORD}</g>`;
-  return svg(w * r, h * r, markAt(w / 2, top + markH / 2, markW) + word, `0 0 ${w} ${h}`);
+  const markW = 96;
+  return svg(w * r, h * r, markAt(w / 2, h / 2, markW), `0 0 ${w} ${h}`);
 }
 
 async function png(svgText, path) {

@@ -8,7 +8,7 @@ import {fitWithin,encodePlan,base64Bytes,resizeImage,MAX_SIDE} from '../lib/imag
 import {DEMO_PACKAGE,type PackageInput} from '../lib/simulation';
 
 const pkg:PackageInput={...DEMO_PACKAGE};
-const decision:AgentDecision={verdict:'fly_standard',condition:'like_new',matchesDescription:true,confidence:.93,checks:[{label:'Drone limits (AERO rules)',ok:true,detail:'Fits Standard.'},{label:'Condition',ok:true,detail:'No visible damage.'}],questions:['Is the original charger included?'],disposition:'restock',explanation:'Looks like new headphones in the box.'};
+const decision:AgentDecision={verdict:'fly_standard',condition:'like_new',matchesDescription:true,confidence:.93,checks:[{label:'Drone limits (AirCart rules)',ok:true,detail:'Fits Standard.'},{label:'Condition',ok:true,detail:'No visible damage.'}],questions:['Is the original charger included?'],disposition:'restock',explanation:'Looks like new headphones in the box.'};
 const eligibility=checkDroneEligibility(pkg,{weightKg:pkg.weight,dimensionsCm:pkg.dimensions,fragile:false});
 const response={source:'live Claude API',model:'claude-opus-5-5',decision,eligibility,steps:[{tool:'check_drone_eligibility',input:{weightKg:1.2,dimensionsCm:[28,20,12],fragile:false},output:eligibility}],eventId:'3f9a4c1e-2b7d-4e5f-9a1b-0c2d3e4f5a6b'};
 const fresh=():ReturnCheckResult=>parseAgentResponse(response,checkKey(pkg),1)!;
@@ -63,7 +63,7 @@ test('result wording: shared needs-person line, honest storage and source notes,
   const person=parseAgentResponse({...response,decision:{...decision,verdict:'needs_person',confidence:.6}},checkKey(pkg),1)!,html=render(person);
   assert.equal(PERSON_NOTE,'A person will review this return before the drone flies.');
   assert.ok(html.includes(PERSON_NOTE));assert.doesNotMatch(html,/confirm this return at pickup/);
-  assert.ok(html.includes('AERO keeps the verdict and Claude’s short explanation, not your photos or description.'));
+  assert.ok(html.includes('AirCart keeps the verdict and Claude’s short explanation, not your photos or description.'));
   assert.ok(html.includes('Live Claude API · claude-opus-5-5'));assert.ok(!render({...person,source:''}).includes('Live Claude API'));
   const stale=render({...person,evidenceChanged:true});assert.match(stale,/Details changed/);assert.doesNotMatch(stale,/\.stale[^{]*\{[^}]*opacity/,'stale text keeps full contrast');
 });
@@ -71,7 +71,7 @@ test('a Priority verdict only says Standard is ruled out when the limit check ru
   const prefers=parseAgentResponse({...response,decision:{...decision,verdict:'fly_priority'}},checkKey(pkg),1)!;
   assert.match(render(prefers),/Standard also fits/);assert.doesNotMatch(render(prefers),/not Standard/);
   const heavy:PackageInput={...pkg,weight:3.4,dimensions:[40,30,20]};
-  assert.match(render(checked(heavy),heavy),/fits AERO Priority, not Standard/);
+  assert.match(render(checked(heavy),heavy),/fits AirCart Priority, not Standard/);
 });
 test('the description prefill and client-side checks guide, but never invent, input',()=>{
   assert.equal(defaultDescription({...pkg,returnReference:' AMZ-1 '}),'Amazon return (reference AMZ-1). Item: ');
@@ -130,7 +130,7 @@ test('needs-person reasons follow the server gate thresholds',()=>{
 test('the trace describes measurements used and the result per tier in plain words',()=>{
   const heavy=checkDroneEligibility(pkg,{weightKg:3.4,dimensionsCm:[40,30,20],fragile:true});
   const v=describeStep({tool:'check_drone_eligibility',input:{weightKg:3.4,dimensionsCm:[40,30,20],fragile:true},output:heavy},pkg);
-  assert.equal(v.title,'Checked AERO’s drone limits');assert.match(v.by,/Claude asked/);
+  assert.equal(v.title,'Checked AirCart’s drone limits');assert.match(v.by,/Claude asked/);
   assert.deepEqual(v.used.slice(0,3),['3.4 kg','40 × 30 × 20 cm','fragile']);assert.match(v.used[3],/you entered 1.2 kg/);
   assert.match(v.results[0],/^Standard \(up to 2.5 kg, 45 cm\): ruled out · Exceeds 2.5 kg/);assert.match(v.results[1],/^Priority \(up to 5 kg, 60 cm\): fits · /);
   const server=describeStep({tool:'check_drone_eligibility',input:{weightKg:1.2,dimensionsCm:[28,20,12],fragile:false,by:'server'},output:eligibility},pkg);

@@ -4,7 +4,7 @@ import {readBody,unsupported} from '@/lib/http';
 export const dynamic='force-dynamic';
 const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'private, no-store'}});
 export async function POST(request:Request){
-  if(!sameOrigin(request))return reply({error:'Start sign-in from AERO.'},403);
+  if(!sameOrigin(request))return reply({error:'Start sign-in from AirCart.'},403);
   try{
     // Over 200 bytes is refused without reading the rest (a chunked body has no Content-Length to check first).
     const raw=await readBody(request,201);if(raw===null)return reply({error:'Invalid sign-in request.'},400);

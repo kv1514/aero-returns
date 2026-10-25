@@ -51,7 +51,7 @@ function EarthScene({config,record,clockOffset,stale,frozenAt}:ExplorerProps){
       m=new ml.Map({container:element.current,style:'https://tiles.openfreemap.org/styles/liberty',center:pointFor('pickup'),zoom:16.6,pitch:62,bearing:20,maxPitch:75,attributionControl:{compact:true}});openMap.current=m;
       new ml.Marker({element:pin('home','Pickup'),anchor:'center'}).setLngLat(pointFor('pickup')).addTo(m);
       new ml.Marker({element:pin('pad drop',hubLabel),anchor:'center'}).setLngLat(pointFor('hub')).addTo(m);
-      drone=new ml.Marker({element:pin('drone',current.current.record.live?.droneName||current.current.record.drone?.name||'AERO–104'),anchor:'center'}).setLngLat(pointFor('drone')).addTo(m);
+      drone=new ml.Marker({element:pin('drone',current.current.record.live?.droneName||current.current.record.drone?.name||'AirCart–104'),anchor:'center'}).setLngLat(pointFor('drone')).addTo(m);
       m.once('style.load',()=>{if(!disposed){setReady(true);readyStatus.current=config.key?'Google 3D is unavailable here, so this view uses free OpenStreetMap 3D buildings. Drag to explore.':'Free 3D buildings from OpenStreetMap. Drag to explore; add a Google Maps key for photorealistic imagery.';setStatus(readyStatus.current);}});
       m.on('error',()=>{if(!disposed&&!m?.isStyleLoaded())setStatus('Could not load 3D buildings. Open Google Earth below or return to tracking.');});
     }).catch(()=>{if(!disposed)setStatus('Could not load 3D buildings. Open Google Earth below or return to tracking.');});

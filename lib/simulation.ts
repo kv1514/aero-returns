@@ -12,11 +12,11 @@ export const DISPATCH: Point = [-122.2933, 37.8798];
 /** The simulated fleet standing by around Berkeley. Bases are illustrative demo spots, not real pads or vehicles. */
 export type SimDrone = { id: string; name: string; base: Point; battery: number };
 export const SIM_FLEET: SimDrone[] = [
-  { id: 'aero-104', name: 'AERO–104', base: DISPATCH, battery: 96 },
-  { id: 'aero-217', name: 'AERO–217', base: [-122.2700, 37.8800], battery: 91 },
-  { id: 'aero-332', name: 'AERO–332', base: [-122.2615, 37.8575], battery: 88 },
-  { id: 'aero-458', name: 'AERO–458', base: [-122.2862, 37.8935], battery: 84 },
-  { id: 'aero-561', name: 'AERO–561', base: [-122.2520, 37.8705], battery: 93 },
+  { id: 'aero-104', name: 'AirCart–104', base: DISPATCH, battery: 96 },
+  { id: 'aero-217', name: 'AirCart–217', base: [-122.2700, 37.8800], battery: 91 },
+  { id: 'aero-332', name: 'AirCart–332', base: [-122.2615, 37.8575], battery: 88 },
+  { id: 'aero-458', name: 'AirCart–458', base: [-122.2862, 37.8935], battery: 84 },
+  { id: 'aero-561', name: 'AirCart–561', base: [-122.2520, 37.8705], battery: 93 },
 ];
 /** The simulated drone a booking was matched to, recorded at booking time. Returns booked before the fleet existed have none and fly from DISPATCH. */
 export type ReturnDrone = { id: string; name: string; base: Point; meters: number };
@@ -24,12 +24,12 @@ export const SPEED = { standard: 12, priority: 15 } as const;
 /** Seconds a simulated drone spends assigned and in pre-flight before it lifts off (see timing()). */
 export const PRE_FLIGHT_S = 10;
 export const FACILITIES: Facility[] = [
-  { id: 'downtown', name: 'AERO Downtown Hub', address: 'Shattuck Ave · Berkeley', point: [-122.2672, 37.8671], retailers: ['Amazon', 'Nike', 'Zara', 'Other'], methods: ['qr', 'label'], enabled: true, available: true, maxWeight: 5 },
-  { id: 'west', name: 'AERO West Berkeley', address: 'Fourth Street · Berkeley', point: [-122.2990, 37.8672], retailers: ['Amazon', 'Nike', 'Other'], methods: ['label'], enabled: true, available: true, maxWeight: 5 },
-  { id: 'north', name: 'AERO Northside', address: 'Solano Avenue · Berkeley', point: [-122.2825, 37.8911], retailers: ['Amazon', 'Zara'], methods: ['qr', 'label'], enabled: true, available: true, maxWeight: 2.5 },
+  { id: 'downtown', name: 'AirCart Downtown Hub', address: 'Shattuck Ave · Berkeley', point: [-122.2672, 37.8671], retailers: ['Amazon', 'Nike', 'Zara', 'Other'], methods: ['qr', 'label'], enabled: true, available: true, maxWeight: 5 },
+  { id: 'west', name: 'AirCart West Berkeley', address: 'Fourth Street · Berkeley', point: [-122.2990, 37.8672], retailers: ['Amazon', 'Nike', 'Other'], methods: ['label'], enabled: true, available: true, maxWeight: 5 },
+  { id: 'north', name: 'AirCart Northside', address: 'Solano Avenue · Berkeley', point: [-122.2825, 37.8911], retailers: ['Amazon', 'Zara'], methods: ['qr', 'label'], enabled: true, available: true, maxWeight: 2.5 },
   { id: 'retail', name: 'Neighborhood Drop-off', address: 'University Avenue · Berkeley', point: [-122.2757, 37.8715], retailers: ['Amazon', 'Nike', 'Zara', 'Other'], methods: ['qr', 'label'], enabled: false, available: true, maxWeight: 10 },
 ];
-export const DEMO_PACKAGE: PackageInput = { retailer: 'Amazon', method: 'qr', weight: 1.2, dimensions: [28, 20, 12], fragile: false, address: PICKUPS[0].address, pickup: PICKUPS[0].point, instructions: 'Use the clear area in the front yard.', service: 'standard', returnReference: 'AERO-DEMO-2841' };
+export const DEMO_PACKAGE: PackageInput = { retailer: 'Amazon', method: 'qr', weight: 1.2, dimensions: [28, 20, 12], fragile: false, address: PICKUPS[0].address, pickup: PICKUPS[0].point, instructions: 'Use the clear area in the front yard.', service: 'standard', returnReference: 'AIRCART-DEMO-2841' };
 export function distance(a: Point, b: Point): number {
   const r = Math.PI / 180, dlat = (b[1] - a[1]) * r, dlng = (b[0] - a[0]) * r;
   const h = Math.sin(dlat / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dlng / 2) ** 2;
@@ -149,7 +149,9 @@ export function settle(r: ReturnRecord, now: number): ReturnRecord {
   const events = [...r.events];
   for (const [state, threshold] of schedule) if (s.elapsed >= threshold && !events.some(e => e.state === state)) events.push({ state, title: STATE_TITLES[state], at: Math.max(r.createdAt, events[events.length - 1]?.at ?? 0, Math.min(now, r.anchor + (threshold - r.elapsed) / r.rate * 1000)) });
   if ((r.cancelled || r.failed) && !events.some(e => e.state === s.state)) events.push({ state: s.state, title: STATE_TITLES[s.state], at: now });
-  return { ...r, events };
+  // Returns saved before the AirCart rename stored "AERO–104"; the id never changed, so show the fleet's current name for it.
+  const current = r.drone && SIM_FLEET.find(d => d.id === r.drone!.id);
+  return { ...r, events, ...(r.drone && current && current.name !== r.drone.name ? { drone: { ...r.drone, name: current.name } } : {}) };
 }
 /** Simulated drones flying this owner's other active returns. A live flight uses a real drone, and an ended return frees its drone. */
 export function busyDrones(records: ReturnRecord[], now: number): string[] {

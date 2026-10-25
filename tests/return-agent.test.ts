@@ -33,6 +33,6 @@ test('uncertainty, mismatches and damage always go to a person', () => {
 test('answers are clamped, and the rule check is always the first listed check', () => {
   const d = gateDecision(answer({ confidence: 4, explanation: 'x'.repeat(5000), questions: Array(9).fill('q'), checks: [...Array(12)].map((_, i) => ({ label: i ? `c${i}` : 'Drone limits guess', ok: true, detail: 'd' })) }), small);
   assert.equal(d.confidence, 1); assert.equal(d.explanation.length, 1200); assert.equal(d.questions.length, 5);
-  assert.equal(d.checks[0].label, 'Drone limits (AERO rules)'); assert.ok(!d.checks.slice(1).some(c => /drone limit/i.test(c.label)));
+  assert.equal(d.checks[0].label, 'Drone limits (AirCart rules)'); assert.ok(!d.checks.slice(1).some(c => /drone limit/i.test(c.label)));
   assert.throws(() => gateDecision({ verdict: 'teleport' }, small));
 });

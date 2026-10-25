@@ -56,7 +56,7 @@ export function gateDecision(raw: unknown, eligibility: Eligibility): AgentDecis
   const r = (raw ?? {}) as Record<string, unknown>;
   const d = decisionSchema.parse({ ...r, confidence: Math.min(1, Math.max(0, Number(r.confidence))), explanation: clip(r.explanation, 1200), checks: Array.isArray(r.checks) ? r.checks.slice(0, 8).map(c => ({ ...c, label: clip(c?.label, 80), detail: clip(c?.detail, 300) })) : r.checks, questions: Array.isArray(r.questions) ? r.questions.slice(0, 5).map(q => clip(q, 200)) : r.questions });
   const { standard, priority } = eligibility;
-  const limit: AgentCheck = { label: 'Drone limits (AERO rules)', ok: standard.eligible || priority.eligible, detail: standard.eligible ? `Fits Standard${standard.facility ? ` · ${standard.facility.name}` : ''}.` : priority.eligible ? `Needs Priority (up to 5 kg, 60 cm per side)${priority.facility ? ` · ${priority.facility.name}` : ''}.` : priority.reasons.join('; ') || 'No compatible facility.' };
+  const limit: AgentCheck = { label: 'Drone limits (AirCart rules)', ok: standard.eligible || priority.eligible, detail: standard.eligible ? `Fits Standard${standard.facility ? ` · ${standard.facility.name}` : ''}.` : priority.eligible ? `Needs Priority (up to 5 kg, 60 cm per side)${priority.facility ? ` · ${priority.facility.name}` : ''}.` : priority.reasons.join('; ') || 'No compatible facility.' };
   let verdict: Verdict = d.verdict;
   if (!standard.eligible && !priority.eligible) verdict = 'not_drone_eligible';
   else if (verdict === 'fly_standard' && !standard.eligible) verdict = 'fly_priority';

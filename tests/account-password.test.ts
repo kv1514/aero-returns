@@ -138,7 +138,7 @@ test('the email form has labelled fields with the right autocomplete for each mo
   assert.match(signup,/<button type="submit" class="primary full">.*Create account<\/button>/);
   assert.match(signin,/<button type="submit" class="primary full">.*Sign in<\/button>/);
   assert.match(signup,/role="status"/,'the confirmation notice has a live region from the start');
-  assert.match(signup,/Accounts are stored with Supabase/);assert.match(signup,/Returns you request stay tied to this account in AERO\./);
+  assert.match(signup,/Accounts are stored with Supabase/);assert.match(signup,/Returns you request stay tied to this account in AirCart\./);
   assert.match(render(),/autoComplete="new-password"/,'Create account is the default');
 });
 

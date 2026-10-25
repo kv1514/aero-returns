@@ -32,7 +32,7 @@ test('a simulated return moves Booked → Picked up → In flight → Received w
   assert.equal(merchantRow(inFlight('a1'), t0 + 4000).stage, 'In flight');
   const done = merchantRow(received('a1', t0, 7 * min), t0 + 8 * min);
   assert.equal(done.stage, 'Received'); assert.equal(done.state, 'COMPLETED'); assert.equal(done.live, false);
-  assert.equal(done.receivedAt, t0 + 7 * min); assert.equal(done.loadedAt, t0 + 2000); assert.equal(done.destination, 'AERO Downtown Hub');
+  assert.equal(done.receivedAt, t0 + 7 * min); assert.equal(done.loadedAt, t0 + 2000); assert.equal(done.destination, 'AirCart Downtown Hub');
   assert.equal(done.status, 'Simulated handoff complete');
 });
 test('rows never expose the customer’s pickup address or instructions', () => {
@@ -151,8 +151,8 @@ test('the returns table keeps table roles for the phone card layout', () => {
   assert.equal(html.split('role="cell"').length - 1, 6);
 });
 test('load failures show the reason: offline keeps it beside the stale data, an expired session stops retrying', () => {
-  const offline = text(desk([book('o1')], {}, { error: 'Can’t reach AERO. Check your connection.', offline: true }));
-  assert.match(offline, /Offline · retrying/); assert.match(offline, /Can’t reach AERO\. Check your connection\. Showing the last data received while the desk retries\./);
+  const offline = text(desk([book('o1')], {}, { error: 'Can’t reach AirCart. Check your connection.', offline: true }));
+  assert.match(offline, /Offline · retrying/); assert.match(offline, /Can’t reach AirCart\. Check your connection\. Showing the last data received while the desk retries\./);
   const halted = text(desk([book('o1')], {}, { error: 'Your account session expired.', halted: true }));
   assert.match(halted, /Not refreshing/); assert.match(halted, /Your account session expired\. The desk stopped refreshing/); assert.doesNotMatch(halted, /retrying|Retrying/);
   const first = text(renderToStaticMarkup(createElement(MerchantDesk, { view: null, error: 'Your account session expired.', offline: false, halted: true })));
@@ -175,7 +175,7 @@ test('a hung request is aborted after 10 s, reported, and polling carries on', a
   const p = poller((n, init) => (n === 1 ? hang(n, init) : ok()));
   t.mock.timers.tick(5000); assert.equal(p.calls(), 1, 'no second request while one is in flight');
   t.mock.timers.tick(5000); await flush();
-  assert.deepEqual(p.events, ['fail: AERO took too long to answer.']);
+  assert.deepEqual(p.events, ['fail: AirCart took too long to answer.']);
   t.mock.timers.tick(5000); await flush();
   assert.equal(p.calls(), 2); assert.deepEqual(p.events.at(-1), 'data');
   p.stop();
@@ -185,7 +185,7 @@ test('an expired session stops polling until the tab is shown again; a network e
   const p = poller(async n => (n === 1 ? { ok: false, status: 401, json: async () => ({ error: 'Your account session expired.' }) } : n === 2 ? Promise.reject(new TypeError('Failed to fetch')) : ok()));
   await flush(); assert.deepEqual(p.events, ['401: Your account session expired.']);
   t.mock.timers.tick(30_000); await flush(); assert.equal(p.calls(), 1, 'no retries after a 401');
-  p.show(); await flush(); assert.equal(p.calls(), 2); assert.equal(p.events.at(-1), 'fail: Can’t reach AERO. Check your connection.');
+  p.show(); await flush(); assert.equal(p.calls(), 2); assert.equal(p.events.at(-1), 'fail: Can’t reach AirCart. Check your connection.');
   t.mock.timers.tick(5000); await flush(); assert.equal(p.calls(), 3, 'polling resumed after the non-401 failure'); assert.equal(p.events.at(-1), 'data');
   p.stop(); assert.equal(p.listeners.size, 0);
   t.mock.timers.tick(30_000); await flush(); assert.equal(p.calls(), 3, 'cleanup stops polling');
@@ -206,7 +206,7 @@ test('a return booked without the Claude check says so instead of "Awaiting chec
   assert.match(text(html), new RegExp(`${NO_CHECK} 2 Active and received returns`), 'the expected-disposition bar counts them under the same label');
 });
 test('the reviewer reads Claude’s whole note, labelled as advisory, and its questions before approving', () => {
-  const explanation = 'Your package fits AERO’s size and weight limits, and we checked it as if fragile. But the box was crushed, so a mug may be cracked: check that any broken pieces are safely packed before pickup. '.repeat(3).trim();
+  const explanation = 'Your package fits AirCart’s size and weight limits, and we checked it as if fragile. But the box was crushed, so a mug may be cracked: check that any broken pieces are safely packed before pickup. '.repeat(3).trim();
   // As booked: the review keeps the verdict, and Claude's questions come from its own stored agent event (what /api/merchant reads).
   const flagged = review({ verdict: 'needs_person', condition: 'damaged', disposition: 'inspect', confidence: .6, explanation });
   const event = { id: flagged.eventId, result: JSON.stringify({ verdict: 'needs_person', explanation, questions: ['Is any piece broken?', 'Is any piece broken?', 'Can it be marked fragile?', 7], model: 'claude-opus-5-5', tools: ['check_drone_eligibility'] }) };

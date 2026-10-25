@@ -34,7 +34,7 @@ export async function readBody(request: Request, limit: number): Promise<string 
   for (const chunk of chunks) { all.set(chunk, offset); offset += chunk.byteLength; }
   return new TextDecoder().decode(all);
 }
-export const DEMO_SESSION_INVALID = 'Your demo session was invalid, so AERO left the demo account. Start it again from Your account.';
+export const DEMO_SESSION_INVALID = 'Your demo session was invalid, so AirCart left the demo account. Start it again from Your account.';
 export const ACCOUNT_SESSION_EXPIRED = 'Your account session expired or is unavailable. Open Your account to sign in again.';
 /** An unresolvable session (invalid demo cookie, expired account) is an explained 401, never an empty 500. Broken demo mode is cleared so the next load starts cleanly. */
 export function sessionFailure(request: Request, extra: Record<string, unknown> = {}) {

@@ -29,14 +29,14 @@ test('an active return reopens its tracking, newest first; a tracking link opens
   assert.deepEqual(recentReturns([older, done, newer]).map(r => r.id), ['done', 'newer', 'older']);
   assert.deepEqual([returnStatus(done, t0 + 3 * min), returnStatus(newer, t0 + 3 * min), returnStatus(control(older, 'cancel', t0 + 3 * min), t0 + 3 * min)], ['Delivered', 'In progress', 'Cancelled']);
 });
-test('the simulated fleet: five drones inside the booking area, AERO–104 among them', () => {
+test('the simulated fleet: five drones inside the booking area, AirCart–104 among them', () => {
   assert.equal(SIM_FLEET.length, 5); assert.equal(new Set(SIM_FLEET.map(d => d.id)).size, 5);
-  assert.ok(SIM_FLEET.some(d => d.name === 'AERO–104'));
+  assert.ok(SIM_FLEET.some(d => d.name === 'AirCart–104'));
   for (const d of SIM_FLEET) assert.ok(inDemoArea(d.base) && d.base[0] > DEMO_BOUNDS.west && d.base[1] < DEMO_BOUNDS.north, d.name);
 });
 test('nearest drones come nearest first, skip busy ones, and quote the ETA tracking will use', () => {
   const list = nearestDrones(PICKUPS[0].point);
-  assert.equal(list.length, 5); assert.equal(list[0].drone.name, 'AERO–217');
+  assert.equal(list.length, 5); assert.equal(list[0].drone.name, 'AirCart–217');
   for (let i = 1; i < list.length; i++) assert.ok(list[i].meters >= list[i - 1].meters);
   assert.ok(Math.abs(list[0].meters - distance(list[0].drone.base, PICKUPS[0].point)) < 1e-6);
   const skip = nearestDrones(PICKUPS[0].point, ['aero-217']);
@@ -46,14 +46,14 @@ test('nearest drones come nearest first, skip busy ones, and quote the ETA track
   const r = book('eta'), quoted = nearestDrones(r.package.pickup)[0];
   assert.equal(quoted.minutes, Math.max(1, Math.ceil(timing(r).pickup / 60)));
   assert.ok(nearestDrones(PICKUPS[2].point, [], 'priority')[0].minutes <= nearestDrones(PICKUPS[2].point)[0].minutes);
-  assert.equal(nearestDrones(PICKUPS[2].point)[0].drone.name, 'AERO–332', 'South Berkeley gets its own nearby drone');
+  assert.equal(nearestDrones(PICKUPS[2].point)[0].drone.name, 'AirCart–332', 'South Berkeley gets its own nearby drone');
 });
 test('a booking records its drone and the inbound route starts at that drone’s base', () => {
   const r = book('r1'), near = nearestDrones(r.package.pickup)[0].drone;
   assert.deepEqual(r.drone, { id: near.id, name: near.name, base: near.base, meters: Math.round(distance(near.base, r.package.pickup)) });
   assert.deepEqual(routes(r).inbound[0], near.base); assert.deepEqual(snapshot(r, t0).point, near.base);
   const chosen = SIM_FLEET.find(d => d.id === 'aero-458')!, other = createReturn({ ...DEMO_PACKAGE }, 'r2', t0, chosen);
-  assert.equal(other.drone?.name, 'AERO–458'); assert.deepEqual(routes(other).inbound[0], chosen.base);
+  assert.equal(other.drone?.name, 'AirCart–458'); assert.deepEqual(routes(other).inbound[0], chosen.base);
   assert.ok(timing(other).pickup > timing(r).pickup, 'a farther drone takes longer to arrive');
   // Facility estimates use the nearest drone, not the old fixed dispatch point.
   const nearest = recommend(DEMO_PACKAGE).find(f => !f.reason)!, fromDispatch = recommend(DEMO_PACKAGE, DISPATCH).find(f => f.id === nearest.id)!;
@@ -92,7 +92,7 @@ test('booking input: the browser cannot pick a drone, and bad bodies get plain 4
 });
 test('choose a ride: each tier quotes its nearest free drone, and a tier the package can’t fly is greyed with the reason', () => {
   const [standard, priority] = rideOptions(DEMO_PACKAGE);
-  assert.deepEqual([standard.name, standard.drone.name, standard.reason], ['AERO Standard', 'AERO–217', null]);
+  assert.deepEqual([standard.name, standard.drone.name, standard.reason], ['AirCart Standard', 'AirCart–217', null]);
   assert.ok(priority.price! > standard.price!); assert.ok(priority.minutes <= standard.minutes);
   assert.equal(rideOptions(DEMO_PACKAGE, ['aero-217'])[0].drone.name, nearestDrones(DEMO_PACKAGE.pickup)[1].drone.name);
   const heavy = rideOptions({ ...DEMO_PACKAGE, weight: 3.4, dimensions: [40, 30, 20] });
@@ -102,15 +102,15 @@ test('choose a ride: each tier quotes its nearest free drone, and a tier the pac
   const rides = html(draft(1, { ...DEMO_PACKAGE, weight: 3.4, dimensions: [40, 30, 20], service: 'priority' }));
   assert.match(rides, /Choose a ride/); assert.match(rides, /Not available · Exceeds 2\.5 kg payload limit/);
   assert.match(rides, /role="radio" aria-checked="false" disabled=""/); assert.match(rides, /min away · arrives /);
-  assert.match(html(draft(2)), /Request AERO Standard/); assert.match(html(draft(2, { ...DEMO_PACKAGE, service: 'priority' })), /Request AERO Priority/);
+  assert.match(html(draft(2)), /Request AirCart Standard/); assert.match(html(draft(2, { ...DEMO_PACKAGE, service: 'priority' })), /Request AirCart Priority/);
   assert.doesNotMatch(html(draft(2)), /No payment or real pickup will occur/, 'booking no longer promises something Fleet could change');
 });
 test('the keyless map names its markers and never calls a live flight a simulation', () => {
-  assert.equal(fleetMarkerName('AERO–217', true), 'Simulated drone AERO–217, nearest to your pickup');
-  assert.equal(fleetMarkerName('AERO–104', false), 'Simulated drone AERO–104');
+  assert.equal(fleetMarkerName('AirCart–217', true), 'Simulated drone AirCart–217, nearest to your pickup');
+  assert.equal(fleetMarkerName('AirCart–104', false), 'Simulated drone AirCart–104');
   const sim = book('m1'), live = { ...sim, live: { droneName: 'Test X500' } as ReturnRecord['live'] };
-  assert.equal(flightDroneName(sim), 'Simulated drone AERO–217'); assert.equal(flightDroneName(live), 'Live drone Test X500');
-  assert.equal(flightDroneName(legacy('m2')), 'Simulated drone AERO–104', 'records from before the fleet keep the old name');
+  assert.equal(flightDroneName(sim), 'Simulated drone AirCart–217'); assert.equal(flightDroneName(live), 'Live drone Test X500');
+  assert.equal(flightDroneName(legacy('m2')), 'Simulated drone AirCart–104', 'records from before the fleet keep the old name');
   const words = routeWords(live);
   for (const text of Object.values(words)) assert.doesNotMatch(text, /simulat|demo/i, text);
   assert.deepEqual([words.hub, words.pickup, words.offline], ['Drop pad', 'Pickup pad', 'Offline route view · last reported position']);

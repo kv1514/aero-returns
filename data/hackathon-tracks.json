@@ -113,7 +113,7 @@
       "requirement": "Working, creative, useful project with thoughtful UX and technical depth.",
       "fit": "strong",
       "source": "https://hive.hackberkeley.org/prizes",
-      "notes": "AERO needs a reliable end-to-end demo and a clear target customer; prize wording differs.",
+      "notes": "AirCart needs a reliable end-to-end demo and a clear target customer; prize wording differs.",
       "additionalSources": [
         "https://cal-hacks-13-0.devpost.com/"
       ]
@@ -125,7 +125,7 @@
       "requirement": "General organizer judging.",
       "fit": "strong",
       "source": "https://hive.hackberkeley.org/prizes",
-      "notes": "Same AERO submission as overall.",
+      "notes": "Same AirCart submission as overall.",
       "additionalSources": []
     },
     {
@@ -135,7 +135,7 @@
       "requirement": "General organizer judging.",
       "fit": "strong",
       "source": "https://hive.hackberkeley.org/prizes",
-      "notes": "Same AERO submission as overall.",
+      "notes": "Same AirCart submission as overall.",
       "additionalSources": []
     },
     {
@@ -540,7 +540,7 @@
       "requirement": "Forge app for Atlassian workflows or agent governance; choose one of two tracks; <=3min demo plus repo.",
       "fit": "poor",
       "source": "https://docs.google.com/document/d/12Y2Vamxbm9W_l2Eo4AM530R7HfNAYCXI-UI6F6Xnggw/edit",
-      "notes": "Real Jira/Confluence exception-workflow or agent-action audit product would qualify in principle; merely planning AERO in Jira does not.",
+      "notes": "Real Jira/Confluence exception-workflow or agent-action audit product would qualify in principle; merely planning AirCart in Jira does not.",
       "additionalSources": []
     },
     {
@@ -694,7 +694,7 @@
       "requirement": "Working team prototype, real problem, opt in and complete supplemental form.",
       "fit": "strong",
       "source": "https://hive.hackberkeley.org/prizes",
-      "notes": "Good low-build-effort path for AERO founders; an interview is not automatic admission.",
+      "notes": "Good low-build-effort path for AirCart founders; an interview is not automatic admission.",
       "additionalSources": [
         "https://www.mlh.com/events/prizes",
         "https://cal-hacks-13-0.devpost.com/"
@@ -707,7 +707,7 @@
       "requirement": "Use DigitalOcean infrastructure or Gradient AI.",
       "fit": "poor",
       "source": "https://hive.hackberkeley.org/prizes",
-      "notes": "Current deployment is elsewhere; hosting migration not necessary for AERO core.",
+      "notes": "Current deployment is elsewhere; hosting migration not necessary for AirCart core.",
       "additionalSources": [
         "https://www.mlh.com/events/prizes"
       ]

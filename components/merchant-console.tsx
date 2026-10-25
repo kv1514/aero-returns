@@ -24,8 +24,8 @@ function clock(ts: number | null, now: number) {
 const minutes = (min: number | null) => (min === null ? '—' : min < 10 ? `${min.toFixed(1)} min` : formatDuration(min));
 /** Plain words for a failed load: the server's own message when it sent one. */
 function failure(e: unknown, timedOut: boolean) {
-  if (timedOut) return 'AERO took too long to answer.';
-  if (e instanceof TypeError) return 'Can’t reach AERO. Check your connection.';
+  if (timedOut) return 'AirCart took too long to answer.';
+  if (e instanceof TypeError) return 'Can’t reach AirCart. Check your connection.';
   return e instanceof Error && e.message ? e.message : 'Could not load the returns desk.';
 }
 
@@ -112,7 +112,7 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
   return <main className="merchant">
     <header className="merchant-top">
       <a href="/" className="merchant-back"><ArrowLeft size={18} />Customer app</a>
-      <h1><Store size={20} />AERO Merchant · Returns desk</h1>
+      <h1><Store size={20} />AirCart Merchant · Returns desk</h1>
       <div className="merchant-status">
         <span className="merchant-chip demo"><i />Demo merchant view of {scope.whose}</span>
         <span className={`merchant-chip ${halted || offline ? 'warn' : ''}`}>{halted ? 'Not refreshing' : offline ? 'Offline · retrying' : view ? `Updated ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : 'Connecting…'}</span>
@@ -146,7 +146,7 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
         {!a.total ? <section className="merchant-card merchant-empty"><Package size={32} /><h2>No returns yet</h2><p>Book a return in the customer app. It appears here as soon as it is booked, then moves from Booked to Received as the drone brings it to the drop-off.</p><a href="/" className="ux-primary">Book a return<ArrowRight size={18} /></a></section> : <>
           <section className="merchant-card merchant-queue" aria-labelledby="merchant-queue-title">
             <div className="merchant-card-head"><h2 id="merchant-queue-title"><UserRound size={18} />Needs a person</h2><span className={`m-count ${queue.length ? 'warn' : ''}`} aria-live="polite">{queue.length}<span className="m-sr"> {queue.length === 1 ? 'return' : 'returns'} waiting for a person</span></span></div>
-            <p className="m-hint">AERO’s rules send a return to a person when Claude is under {CONFIDENT * 100}% confident, the item may not match its description, it may be damaged or its condition is unclear, Claude finds it may be outside the drone limits, or Claude asks for a person’s judgement. Its drone stays on the ground, simulated or live, until someone approves it here. Declining cancels the pickup. Longest-waiting first.</p>
+            <p className="m-hint">AirCart’s rules send a return to a person when Claude is under {CONFIDENT * 100}% confident, the item may not match its description, it may be damaged or its condition is unclear, Claude finds it may be outside the drone limits, or Claude asks for a person’s judgement. Its drone stays on the ground, simulated or live, until someone approves it here. Declining cancels the pickup. Longest-waiting first.</p>
             <p className="m-hint m-demo-note"><b className="m-tag">Demo</b> You are the reviewer here, signed in as the customer. A retailer would review from its own staff account.</p>
             {decision && <div className="merchant-notice" role="status"><Check size={16} /><span>{decision}</span></div>}
             {queue.length ? <ol className="merchant-queue-list">{queue.map(r => { const review = r.review!; return <li key={r.id}>
@@ -166,7 +166,7 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
           </section>
           <section className="merchant-card merchant-returns" aria-labelledby="merchant-returns-title">
             <div className="merchant-card-head"><h2 id="merchant-returns-title"><Package size={18} />All returns</h2><span className="m-sub">{a.total} booked {scope.where} · newest first{a.total + view.skipped >= view.limit ? ` · latest ${view.limit} shown` : ''}</span></div>
-            <p className="m-hint m-legend"><span className="m-flight"><Sparkles size={12} />Simulation</span> AERO’s demo flight model; no drone flew. <span className="m-flight live"><i />Live flight</span> Sent over the signed drone link from the Fleet console; the vehicle may be a simulator.</p>
+            <p className="m-hint m-legend"><span className="m-flight"><Sparkles size={12} />Simulation</span> AirCart’s demo flight model; no drone flew. <span className="m-flight live"><i />Live flight</span> Sent over the signed drone link from the Fleet console; the vehicle may be a simulator.</p>
             {/* Explicit roles keep table semantics when the phone layout restyles rows as cards. */}
             <div className="merchant-table-wrap"><table className="merchant-table" role="table" aria-labelledby="merchant-returns-title">
               <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Return</th><th scope="col" role="columnheader">Stage</th><th scope="col" role="columnheader">Claude grade</th><th scope="col" role="columnheader">Disposition</th><th scope="col" role="columnheader">Booked</th><th scope="col" role="columnheader">Picked up</th><th scope="col" role="columnheader">Received</th></tr></thead>
@@ -186,9 +186,9 @@ export function MerchantDesk({ view, error, offline, halted = false, onDecide, d
       <section className="merchant-trust" aria-labelledby="merchant-trust-title">
         <h2 id="merchant-trust-title"><ShieldCheck size={18} />What this desk does and doesn’t do</h2>
         <ul>
-          <li><strong>No refunds are issued.</strong> AERO never approves a return, charges or refunds anyone. Refunds stay with your existing returns process.</li>
-          <li><strong>Claude grades are advisory.</strong> They come from the customer’s description and any photos before pickup, inside AERO’s fixed drone limits. A “needs a person” return stays on the ground until someone approves or declines it on this desk, and live dispatch from Fleet is blocked until then. Nothing is restocked or rejected automatically.</li>
-          <li><strong>Simulation and live flights are labelled.</strong> Simulated returns follow AERO’s demo flight model; no drone flies. A live flight row ran through the signed drone link from the <a href="/fleet">Fleet console</a>. AERO’s record doesn’t show whether a real aircraft or a simulator answered: test missions use scripted acknowledgements or the bridge’s simulated vehicle.</li>
+          <li><strong>No refunds are issued.</strong> AirCart never approves a return, charges or refunds anyone. Refunds stay with your existing returns process.</li>
+          <li><strong>Claude grades are advisory.</strong> They come from the customer’s description and any photos before pickup, inside AirCart’s fixed drone limits. A “needs a person” return stays on the ground until someone approves or declines it on this desk, and live dispatch from Fleet is blocked until then. Nothing is restocked or rejected automatically.</li>
+          <li><strong>Simulation and live flights are labelled.</strong> Simulated returns follow AirCart’s demo flight model; no drone flies. A live flight row ran through the signed drone link from the <a href="/fleet">Fleet console</a>. AirCart’s record doesn’t show whether a real aircraft or a simulator answered: test missions use scripted acknowledgements or the bridge’s simulated vehicle.</li>
           <li><strong>Demo data.</strong> This view shows the latest {view?.limit ?? 100} returns booked {scope.where}, not a retailer’s account, and no customer addresses. Store trips avoided and time saved are estimates, not measurements. <a href={`${GH}/blob/main/lib/merchant.ts`} target="_blank" rel="noreferrer">How each number is counted<ArrowUpRight size={12} /></a></li>
         </ul>
       </section>

@@ -39,10 +39,10 @@ export function EmailAccountForm({disabled=false,initialMode='signup',onBusyChan
       if(data.confirm){setNotice(data.message||CONFIRM_EMAIL_MESSAGE);setMode('signin');setPassword('');setShow(false);setBusy(false);return;}
       if(!r.ok||!data.signedIn)throw new Error(data.error||'Sign-in did not complete. Please try again.');
       setPassword('');onSignedIn();
-    }catch(e){setError(e instanceof TypeError?'Could not reach AERO. Check your connection and try again.':(e as Error).message);setBusy(false);}
+    }catch(e){setError(e instanceof TypeError?'Could not reach AirCart. Check your connection and try again.':(e as Error).message);setBusy(false);}
   }
   return <form className="account-email" noValidate aria-busy={busy} aria-labelledby="account-email-title" onSubmit={e=>void submit(e)}>
-    <h4 id="account-email-title">{signup?'Create an AERO account':'Sign in with email'}</h4>
+    <h4 id="account-email-title">{signup?'Create an AirCart account':'Sign in with email'}</h4>
     <div className="account-mode" role="group" aria-label="Email account">
       <button type="button" aria-pressed={signup} disabled={locked} onClick={()=>choose('signup')}>Create account</button>
       <button type="button" aria-pressed={!signup} disabled={locked} onClick={()=>choose('signin')}>Sign in</button>
@@ -58,7 +58,7 @@ export function EmailAccountForm({disabled=false,initialMode='signup',onBusyChan
     <button type="submit" className="primary full" disabled={locked}><Mail size={17} aria-hidden="true"/>{busy?(signup?'Creating account…':'Signing in…'):(signup?'Create account':'Sign in')}</button>
     <div role="status" className="account-live">{notice&&<p className="account-notice">{notice}</p>}</div>
     {error&&<p className="error-note" role="alert">{error}</p>}
-    <p className="fine-print">Accounts are stored with Supabase, AERO’s sign-in service (your email and a hashed password). Returns you request stay tied to this account in AERO.</p>
+    <p className="fine-print">Accounts are stored with Supabase, AirCart’s sign-in service (your email and a hashed password). Returns you request stay tied to this account in AirCart.</p>
   </form>;
 }
 export default function AccountPanel({onHistory,returns,now,onOpen,returnsFailed=false}:{onHistory:()=>void;returns:ReturnRecord[];now:number;onOpen:(id:string)=>void;returnsFailed?:boolean}){
@@ -100,7 +100,7 @@ export default function AccountPanel({onHistory,returns,now,onOpen,returnsFailed
         <p className="account-signed-in">Signed in as <strong>{account.user.email||account.user.name}</strong></p>
         <AccountRecentReturns returns={returns} now={now} onOpen={onOpen} failed={returnsFailed}/>
         <button className="primary full" onClick={onHistory}>View your returns</button>
-        <button className="secondary full" disabled={!!busy} onClick={()=>void signOut()}><LogOut size={17}/>{busy==='out'?'Signing out…':'Sign out of AERO'}</button>
+        <button className="secondary full" disabled={!!busy} onClick={()=>void signOut()}><LogOut size={17}/>{busy==='out'?'Signing out…':'Sign out of AirCart'}</button>
       </>:<>
         {account?.email&&<>
           <p className="account-divider"><span>or use an email account</span></p>

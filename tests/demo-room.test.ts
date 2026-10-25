@@ -21,7 +21,7 @@ test('team coaching and sponsor research sit in one collapsed section after the 
   assert.ok(team > 0, 'collapsed by default');
   assert.ok(html.indexOf('Keep the demo honest.') < team, 'build status stays judge-facing');
   for (const heading of ['YOUR THREE-MINUTE STORY', 'Before you pitch', 'The full opportunity map.', 'Resolve these before submission.']) assert.ok(html.indexOf(heading) > team, `${heading} is inside the team section`);
-  assert.match(text, /For the AERO team Pitch script, rehearsal checklist, prize research and open questions\. Not part of the judging\./);
+  assert.match(text, /For the AirCart team Pitch script, rehearsal checklist, prize research and open questions\. Not part of the judging\./);
 });
 
 test('open questions use readable source names, never raw data keys', () => {

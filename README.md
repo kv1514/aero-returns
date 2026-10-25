@@ -1,4 +1,4 @@
-# AERO — Returns, without the trip
+# AirCart — Returns, without the trip
 
 A map-first drone returns app for the Cal Hacks 13.0 demo. Returns run on a deterministic **simulation** by default, and an owner-registered **PX4 or ArduPilot drone** can fly a real return through the signed drone link ([`docs/DRONE_LINK.md`](docs/DRONE_LINK.md)). It never creates a carrier return, charges a payment method, or approves a retailer refund. No physical flight has happened yet.
 
@@ -10,9 +10,9 @@ Continuing with Claude? Start with [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENT
 
 ## Install it on your phone
 
-AERO is an installable home-screen app: it opens full screen with its own icon and a white AERO splash screen.
+AirCart is an installable home-screen app: it opens full screen with its own icon and a white splash screen.
 
-- **iPhone (Safari):** open https://aero-returns.kv15.workers.dev, tap **Share** (on iOS 26, tap **•••** first), then **Add to Home Screen** (scroll the share sheet if it isn't listed). Keep the name AERO, leave **Open as Web App** on if iOS shows it, and tap **Add**.
+- **iPhone (Safari):** open https://aero-returns.kv15.workers.dev, tap **Share** (on iOS 26, tap **•••** first), then **Add to Home Screen** (scroll the share sheet if it isn't listed). Keep the name AirCart, leave **Open as Web App** on if iOS shows it, and tap **Add**.
 - **Android (Chrome):** open the same URL, tap **⋮**, then **Add to Home screen** or **Install app**, and confirm. Chrome draws the splash from the manifest. Long-press the icon for shortcuts to the merchant desk, Fleet console and judge room.
 
 There is no service worker and no offline mode: tracking and telemetry always come from the network. On iPhone the home-screen app can keep its own cookies, separate from Safari, so returns you booked as a guest in Safari may not show there; book from the installed app.
@@ -21,8 +21,8 @@ The pieces: `public/manifest.webmanifest`, the icons in `public/` and `public/ic
 
 ## Request a drone
 
-1. **Home screen.** Nothing is booked when you open AERO. It reopens your newest active return, or shows the home sheet: your pickup, **Request a drone**, the nearest free simulated drone and its ETA, a sample return code, Amazon import, nearby drop-offs and your recent returns.
-2. **Booking** has three steps: *Your package* (pickup, return QR or label, weight and size; optional Claude return check), *Choose a ride* (AERO Standard up to 2.5 kg and 45 cm per side, AERO Priority up to 5 kg and 60 cm, each with its nearest free drone and ETA, or the reason the package can't fly it) and *Review & request*.
+1. **Home screen.** Nothing is booked when you open AirCart. It reopens your newest active return, or shows the home sheet: your pickup, **Request a drone**, the nearest free simulated drone and its ETA, a sample return code, Amazon import, nearby drop-offs and your recent returns.
+2. **Booking** has three steps: *Your package* (pickup, return QR or label, weight and size; optional Claude return check), *Choose a ride* (AirCart Standard up to 2.5 kg and 45 cm per side, AirCart Priority up to 5 kg and 60 cm, each with its nearest free drone and ETA, or the reason the package can't fly it) and *Review & request*.
 3. **Matching.** After **Request**, "Finding your nearest drone…" stays up until the server has booked the return (at least 1.8 s), then the matched drone shows for 2.5 s and tracking opens.
 
 The simulated fleet is five drones with illustrative bases around Berkeley (`SIM_FLEET` in `lib/simulation.ts`; not real pads or vehicles). `nearestDrones` sorts them by straight-line distance from the pickup and quotes the ETA tracking will use (10 s pre-flight plus the inbound route at 12 m/s Standard or 15 m/s Priority). The server picks the drone, never the browser: `assignDrone` takes the nearest one not busy on another of this owner's active simulated returns, or the nearest overall when all are busy. The record keeps its drone, and the flight starts from that drone's base. Returns booked before the fleet existed fly from the old dispatch point.

@@ -9,7 +9,7 @@ import type { ReturnReview } from '../lib/return-agent-shared';
 // RT-01: Claude's own measurements can rule a package out while the entered ones fit, and that check still attaches to the booking.
 // A not_drone_eligible check must hold the return for a person exactly like needs_person, never fly unchecked.
 const t0 = Date.UTC(2026, 9, 24, 18, 0), min = 60_000;
-const check: ReturnReview = { verdict: 'not_drone_eligible', condition: 'new', disposition: 'restock', confidence: .92, explanation: 'The product page lists a 7 kg item, beyond every AERO drone.', model: 'claude-opus-5-5', eventId: '33333333-3333-4333-8333-333333333333', at: t0 };
+const check: ReturnReview = { verdict: 'not_drone_eligible', condition: 'new', disposition: 'restock', confidence: .92, explanation: 'The product page lists a 7 kg item, beyond every AirCart drone.', model: 'claude-opus-5-5', eventId: '33333333-3333-4333-8333-333333333333', at: t0 };
 // As lib/server.ts attaches it to a new booking: stamped with the hold.
 const ruledOut = bookedReview(check);
 const booked = (id = 'n1', review: ReturnReview = ruledOut): ReturnRecord => ({ ...createReturn({ ...DEMO_PACKAGE }, id, t0), review });

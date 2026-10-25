@@ -9,7 +9,7 @@ const NOT_COMPLETED='Sign-in did not complete. Please try again.';
 // Email + password sign-up and sign-in through Supabase Auth. The body holds a password: never log it, echo it or store it.
 // Supabase keeps the account; AERO keeps only the verified user ID as the owner of that account's returns (supabase:<uuid>).
 export async function POST(request:Request){
-  if(!sameOrigin(request))return reply({error:'Sign in from AERO.'},403);
+  if(!sameOrigin(request))return reply({error:'Sign in from AirCart.'},403);
   if(!accountConfig().email)return reply({error:EMAIL_SETUP_NEEDED},503);
   // Stops reading at the cap, so a body sent without a Content-Length is refused without being buffered whole.
   let raw:string|null;try{raw=await readBody(request,PASSWORD_BODY_LIMIT);}catch{return reply({error:'Invalid sign-in request.'},400);}

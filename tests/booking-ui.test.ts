@@ -32,14 +32,14 @@ test('ride tiers are a single Tab stop (the chosen tier), with their labels unch
   assert.equal(rides.match(/role="radio"/g)?.length, 2);
   assert.equal(rides.match(/tabindex="0"/g)?.length, 1, 'only the chosen tier is in the Tab order');
   assert.match(rides, /role="radio" aria-checked="true"[^>]*tabindex="0"[^>]*data-service="standard"/);
-  assert.match(rides, /AERO Standard/); assert.match(rides, /AERO Priority/); assert.match(rides, /Demo · no charge/);
+  assert.match(rides, /AirCart Standard/); assert.match(rides, /AirCart Priority/); assert.match(rides, /Demo · no charge/);
 });
 
 test('Review & request keeps the destination in view and says why Request is still off', () => {
   const page = html(2);
   assert.match(page, new RegExp(`RETURN DESTINATION</small><strong>${booked(DEMO_PACKAGE).name}</strong><em class="review-sub">Auto-matched · lowest estimated cost · simulated</em>`));
   assert.match(page, /<p class="footer-hint" id="review-hint">.*Tick “I’ve reviewed the package details” to request\.<\/p>/);
-  assert.match(page, /disabled="" aria-describedby="review-hint"[^>]*>Request AERO Standard/);
+  assert.match(page, /disabled="" aria-describedby="review-hint"[^>]*>Request AirCart Standard/);
   assert.match(page, /I’ve reviewed the package details\./);
   for (const label of ['Your package', 'Choose a ride', 'Review &amp; request', 'Start over', 'Back']) assert.ok(page.includes(label), label);
   assert.match(page, /aria-current="step"[^>]*>.*?Review &amp; request/);

@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "AERO — Returns, without the trip.",
-  "short_name": "AERO",
+  "name": "AirCart — Returns, without the trip.",
+  "short_name": "AirCart",
   "description": "Your return, a little more effortless. An interactive drone pickup and delivery simulation in Berkeley.",
   "lang": "en",
   "dir": "ltr",
