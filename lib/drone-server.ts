@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import { z } from 'zod';
 import { session } from './session';
 import { sessionFailure } from './http';
+import { publishDrone, publishReport, removeDrone } from './spacetime-server';
 import { deriveDroneKey, formatCommand, lineDroneId, parseDroneBody, signLine, verifyLine, type Ack, type CommandType, type DroneMessage } from './drone-protocol';
 import { ARM_WINDOW_MS, ENDED, EXPIRY_S, GROUND_PHASES, LIMITS, STALE_MS, ackOutcome, airborne, configProblem, customerAction, dispatchBlockers, droneGoneError, enterPhase, fleetInputError, isStale, groundChange, operatorAction, phaseCommand, pickupFor, pickupMismatch, settledFinal, startLive, type Drone, type DroneConfig, type PlannedCommand } from './drone-mission';
 import type { LiveFlight, LiveTelemetry, MissionPhase, Point, ReturnRecord } from './simulation';
@@ -175,6 +176,7 @@ export async function handleLink(request: Request) {
   const now = Date.now();
   await ingest(db, drone, messages, now);
   const fresh = (await loadDrone(db, drone.id))!; await expireCommands(db, fresh, now);
+  publishReport(db, drone, fresh);
   return text((await pendingLines(db, drone.id, now)).join('\n'));
 }
 
@@ -200,6 +202,7 @@ export async function handleSms(request: Request) {
   if (!drone.phoneVerified) await db.prepare('UPDATE drones SET phone_verified = 1 WHERE id = ?').bind(drone.id).run();
   await ingest(db, drone, messages, now);
   const fresh = (await loadDrone(db, drone.id))!; await expireCommands(db, fresh, now); await flushSms(db, fresh, now, true);
+  publishReport(db, drone, fresh);
   return twiml;
 }
 
@@ -291,6 +294,7 @@ export async function handleFleet(request: Request, id?: string): Promise<Respon
       if (drone.activeReturn) return reply({ error: 'End the live flight before removing this drone.' }, 409);
       if (airborne(drone.telemetry)) return reply({ error: 'Land the drone before removing it; ABORT stops working once it is removed.' }, 409);
       await db.batch([db.prepare('DELETE FROM drone_commands WHERE drone_id = ?').bind(id), db.prepare('DELETE FROM drone_telemetry WHERE drone_id = ?').bind(id), db.prepare('DELETE FROM drones WHERE id = ? AND owner = ?').bind(id, owner)]);
+      removeDrone(id);
       return reply({ deleted: true });
     }
     let key: string | undefined;
@@ -353,6 +357,7 @@ export async function handleFleet(request: Request, id?: string): Promise<Respon
         await stepMission(db, drone, r => operatorAction(r, action, drone!.config.pickupPad, drone!.telemetry), now);
       }
       drone = (await loadDrone(db, id))!;
+      publishDrone(db, drone, mission?.record.id);
     }
     const [trail, commands] = await Promise.all([
       db.prepare('SELECT data FROM drone_telemetry WHERE drone_id = ? ORDER BY seq DESC LIMIT 240').bind(id).all<{ data: string }>(),

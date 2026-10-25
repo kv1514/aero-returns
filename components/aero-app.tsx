@@ -16,6 +16,7 @@ import type { ReturnCheckResult } from './return-check';
 import {DRAFT_KEY,readDraft,type BookingDraft} from '@/lib/booking-draft';
 import ReturnAssistant from './return-assistant';
 import Accessibility, {useAccessibility} from './accessibility';
+import {changeKey,useLiveSync} from './live-sync';
 import { DroneIllustration, droneMarkerSvg } from './drone';
 import { DISPOSITION_LABEL } from '@/lib/return-agent-shared';
 import { CONDITION_LABEL } from '@/lib/merchant';
@@ -40,6 +41,7 @@ function DroneGlyph(){return <span className="ux-glyph" aria-hidden="true" dange
 export default function AeroApp({initialId}: {initialId?:string}) {
   const {prefs,setPrefs}=useAccessibility();
   const mapConfig=useMapConfig();
+  const stdb=useLiveSync(),synced=stdb.status==='live';
   const [demoAccount,setDemoAccount]=useState(false),[accountReturnsFailed,setAccountReturnsFailed]=useState(false);
   useEffect(()=>{let active=true;fetch('/api/account').then(r=>r.json() as Promise<{demo?:boolean}>).then(a=>{if(active)setDemoAccount(a.demo===true);}).catch(()=>{});return()=>{active=false;};},[]);
   const [pickupGuide,setPickupGuide]=useState<PickupGuide|null>(null);
@@ -100,11 +102,16 @@ export default function AeroApp({initialId}: {initialId?:string}) {
     }catch(e){setError((e as Error).message);setView('home');}};
     if(authMessage){try{sessionStorage.removeItem(DRAFT_KEY);}catch{}const authChannel=new BroadcastChannel('aero-returns');authChannel.postMessage({authChanged:true});authChannel.close();}
     if(shouldInitialize)void initialize().finally(()=>{if(authMessage)notify(authMessage);if(amazonResult){setDialog('amazon');notify(amazonResult==='linked'?'Amazon profile linked. Import a return to continue.':amazonResult==='cancelled'?'Amazon connection cancelled.':amazonResult==='session'?'Your AirCart session ended before Amazon finished. Open Your account to sign in or restart the demo, then connect again.':'Amazon connection did not complete. Check setup and try again.');window.history.replaceState({},'',location.pathname);}else if(wantsBooking){openBooking();window.history.replaceState({},'',location.pathname);}});
-    const ticker=setInterval(()=>setNow(Date.now()),200),poll=setInterval(()=>void refresh(),2000);
+    const ticker=setInterval(()=>setNow(Date.now()),200);
     const visibility=()=>{if(!document.hidden)void refresh();};document.addEventListener('visibilitychange',visibility);
     channel.current=new BroadcastChannel('aero-returns');channel.current.onmessage=(event)=>{if(event.data?.authChanged){try{sessionStorage.removeItem(DRAFT_KEY);}catch{}location.assign('/');}else if(recordRef.current)void refresh();else void loadHistory().catch(()=>{});};
-    return()=>{clearInterval(ticker);clearInterval(poll);document.removeEventListener('visibilitychange',visibility);channel.current?.close();clearTimeout(toastTimer.current);};
+    return()=>{clearInterval(ticker);document.removeEventListener('visibilitychange',visibility);channel.current?.close();clearTimeout(toastTimer.current);};
   },[]);// eslint-disable-line react-hooks/exhaustive-deps
+  // With SpacetimeDB live, a change to this return's row refetches it at once, so a simulated return's poll slows from 2 s to 8 s; the server stays the source.
+  // A live flight keeps 2 s: only a read notices its drone going silent, and "Drone signal lost" must not wait.
+  const syncRow=record?stdb.returns.find(x=>x.returnId===record.id):undefined,syncKey=changeKey(syncRow),slowPoll=synced&&!record?.live;
+  useEffect(()=>{if(!syncKey)return;const timer=setTimeout(()=>void refresh(),300);return()=>clearTimeout(timer);},[syncKey]);// eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{const poll=setInterval(()=>void refresh(),slowPoll?8000:2000);return()=>clearInterval(poll);},[slowPoll]);// eslint-disable-line react-hooks/exhaustive-deps
   const displayTime=record?(offline?lastSync:now+offset):0,clockNow=now+offset;
   const r=record?settle(record,displayTime):placeholder;
   const s=snapshot(r,displayTime),facility=FACILITIES.find(f=>f.id===r.facilityId)!;
@@ -127,7 +134,7 @@ export default function AeroApp({initialId}: {initialId?:string}) {
   const free=nearestDrones(scenePickup,busyIds),near=free[0]??nearestDrones(scenePickup)[0],homeNear=nearestDrones(homePickup.pickup,busyIds)[0]??nearestDrones(homePickup.pickup)[0];
   const scene:HomeScene|null=record?null:{pickup:scenePickup,label:'Your pickup',drones:(free.length?free:[near]).map(n=>n.drone),nearestId:near.drone.id,matching:match?.phase==='finding'};
   const found=match?.phase==='found'&&record?.id===match.id,tracking=view==='track'&&!!record&&!match,loading=view==='loading';
-  const recent=recentReturns(history);
+  const recent=recentReturns(history),sharedFlights=stdb.stats?.activeSimFlights??0;
   const shown=dialog&&(record||!RETURN_DIALOGS.includes(dialog))?dialog:null;
   const toastView=toast&&<div className="toast" role="status"><span><Check size={15}/></span>{toast}<button aria-label="Dismiss notification" onClick={()=>setToast('')}><X size={15}/></button></div>;
   const simLabel=<span className="ux-sim-label"><i/>{demoAccount?'Demo account · Simulation':'Simulation'}</span>;
@@ -139,6 +146,7 @@ export default function AeroApp({initialId}: {initialId?:string}) {
     <button className="ux-where" disabled={loading} onClick={()=>openBooking()}><span className="ux-dot"/><span><small>Pickup</small><strong>{homePickup.address.split(',')[0]}</strong></span><ChevronRight size={18}/></button>
     <button className="ux-primary ux-request" disabled={loading||busy} onClick={()=>openBooking()}><Navigation size={18}/>Request a drone</button>
     <div className="ux-nearest"><DroneGlyph/><span><small>Nearest drone</small><strong>{homeNear.drone.name} · {km(homeNear.meters)} · about {homeNear.minutes} min away</strong></span></div>
+    {synced&&<div className="stdb-shared"><Radio size={15}/><span>Shared fleet: {sharedFlights} simulated {sharedFlights===1?'flight':'flights'} in progress across all customers · live via SpacetimeDB</span></div>}
     <div className="ux-list">{([[QrIcon,'Try a sample return code','Fills in a demo Amazon return',sampleCode],[Package,'Import from Amazon','Bring in a return you started on Amazon',()=>setDialog('amazon')],[Building2,'Nearby drop-offs','Drop-off points near your pickup',()=>setDialog('nearby')]] as const).map(([Icon,title,text,go])=><button key={title} className="ux-row" onClick={go}><span className="ux-row-icon"><Icon size={20}/></span><span><strong>{title}</strong><small>{text}</small></span><ChevronRight size={18}/></button>)}</div>
     {recent.length>0&&<section className="ux-recent" aria-labelledby="ux-recent-title"><div className="ux-recent-head"><h2 id="ux-recent-title">Recent returns</h2><button onClick={showHistory}>See all</button></div><div className="ux-list">{recent.map(h=><a key={h.id} className="ux-row" href={`/track/${h.id}`} onClick={e=>{e.preventDefault();void openReturn(h.id);}}><span className="ux-row-icon"><Package size={20}/></span><span><strong>{h.package.retailer} return</strong><small>{returnStatus(h,clockNow)} · {new Date(h.createdAt).toLocaleDateString()}</small></span><ChevronRight size={18}/></a>)}</div></section>}
     <div className="ux-tiles"><button onClick={()=>setDialog('assistant')}><Sparkles size={20}/><strong>Assistant</strong><small>Smarter start</small></button><button onClick={()=>setDialog('maps')}><MapPin size={20}/><strong>Maps</strong><small>Location settings</small></button><button onClick={()=>setDialog('about')}><CircleHelp size={20}/><strong>How it works</strong><small>Three steps</small></button></div>
@@ -169,6 +177,7 @@ export default function AeroApp({initialId}: {initialId?:string}) {
           {!live&&<div className="ux-sheet-label">{simLabel}</div>}
           <div className="ux-progress" aria-label={`Step ${step+1} of 4: ${segments[step]}`}>{segments.map((label,i)=><span key={label} className={i<step||complete?'done':i===step&&!terminal?'active':''}><i/></span>)}</div>
           <div className="ux-progress-labels">{segments.map((label,i)=><small key={label} className={i===step?'current':''}>{label}</small>)}</div>
+          {synced&&syncRow&&<span className="stdb-chip" title="This return’s status reaches this screen through SpacetimeDB. AERO’s server stays the source."><i/>Live via SpacetimeDB</span>}
           {live?.stale&&!terminal&&<div className="ux-alert"><Signal size={16}/><span><strong>Drone signal lost.</strong> It follows its onboard failsafe and returns home if the link stays down.</span></div>}
           <div className={`ux-actions ${terminal?'two':''}`}>{waiting?<button className="ux-primary" disabled={busy||offline} onClick={()=>setDialog('load')}><Package size={18}/>Confirm package is loaded</button>:complete?<><button className="ux-primary" onClick={()=>setDialog('receipt')}><CheckCircle2 size={18}/>View receipt</button><button className="ux-secondary" onClick={goHome}><Check size={18}/>Done</button></>:cancelled?<><button className="ux-primary" onClick={goHome}><Check size={18}/>Done</button><button className="ux-secondary" onClick={()=>openBooking()}>Request another</button></>:held?<a className="ux-secondary" href="/merchant"><LogInIcon size={17}/>Review it on the merchant desk (demo)</a>:r.failed&&!live?<button className="ux-primary" onClick={()=>void action('retry')}>Resume demo flight</button>:<button className="ux-secondary" onClick={()=>setDialog(r.loaded?'activity':'instructions')}>{r.loaded?<Radio size={17}/>:<InfoIcon/>}{r.loaded?'Flight updates':'Pickup instructions'}</button>}</div>
           <div className="ux-courier">

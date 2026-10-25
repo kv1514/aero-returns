@@ -21,6 +21,10 @@ declare namespace Cloudflare {
     TWILIO_AUTH_TOKEN?: string;
     TWILIO_FROM_NUMBER?: string;
     AERO_TRUST_SITES_IDENTITY?: string;
+    /** Optional SpacetimeDB live sync (docs/SPACETIMEDB.md); on only with SPACETIMEDB_DATABASE, SPACETIMEDB_TOKEN and DRONE_LINK_SECRET. */
+    SPACETIMEDB_URI?: string;
+    SPACETIMEDB_DATABASE?: string;
+    SPACETIMEDB_TOKEN?: string;
     BUCKET?: R2Bucket;
   }
 }

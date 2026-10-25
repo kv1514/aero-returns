@@ -5,6 +5,12 @@ DRONE_LINK_SECRET=
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_FROM_NUMBER=
+# Optional SpacetimeDB live sync (docs/SPACETIMEDB.md); also needs DRONE_LINK_SECRET. Empty database = off, the app polls as before.
+# URI: empty means https://maincloud.spacetimedb.com; http://127.0.0.1:3000 for a local `spacetime start`.
+SPACETIMEDB_URI=
+SPACETIMEDB_DATABASE=
+# The Worker's own identity token from POST <uri>/v1/identity, never the CLI login token.
+SPACETIMEDB_TOKEN=
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-opus-5-5
 APIFY_TOKEN=

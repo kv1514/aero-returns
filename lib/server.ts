@@ -5,6 +5,7 @@ import { attachLive, liveReturnRequest } from './drone-server';
 import { assignDrone, bookedReview, control, createReturn, settle, snapshot, type ReturnRecord } from './simulation';
 import { packageSchema, validationMessage } from './request-flow';
 import type { ReturnReview } from './return-agent-shared';
+import { publishReturn } from './spacetime-server';
 export { session, packageSchema };
 const actionSchema = z.object({ action: z.enum(['load','pause','resume','advance','reset','cancel','speed','fail','retry','approve','decline']), rate: z.number().optional() });
 export async function handle(request: Request, id?: string): Promise<Response> {
@@ -39,6 +40,7 @@ export async function handle(request: Request, id?: string): Promise<Response> {
         if (event) { const s = JSON.parse(event.result) as Omit<ReturnReview, 'eventId' | 'at'>; r.review = bookedReview({ verdict: s.verdict, condition: s.condition, disposition: s.disposition, confidence: s.confidence, explanation: s.explanation, model: s.model, eventId: agentEventId, at: event.created_at }); }
       }
       await db.prepare('INSERT INTO returns (id, owner, created_at, version, record) VALUES (?, ?, ?, ?, ?)').bind(r.id, owner, now, 0, JSON.stringify(r)).run();
+      publishReturn(owner, r, now, true);
       return reply({ record: r, now }, 201);
     }
     if (!id) return reply({ error: 'Not found.' }, 404);
@@ -61,6 +63,7 @@ export async function handle(request: Request, id?: string): Promise<Response> {
         return reply({ error: 'This return changed in another tab. Please try again.' }, 409);
       }
     }
+    publishReturn(owner, r, now, r.version !== existing.version); // counts change only when a booking or milestone is saved
     return reply({ record: r, telemetry: snapshot(r, now), now });
   } catch (error) {
     if (error instanceof z.ZodError) return reply({ error: validationMessage(error) }, 400);

@@ -50,3 +50,7 @@ __pycache__/
 # Drone bridge local environment and state
 /bridge/.venv/
 .aero-bridge-*.json
+
+# SpacetimeDB module (spacetime/): its own dependencies and build output
+/spacetime/node_modules/
+/spacetime/dist/

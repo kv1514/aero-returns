@@ -58,3 +58,26 @@ body[data-theme='dark'] .earth-entry{background:#1c2b3e;color:#e3eaf5}body[data-
 .pickup-confirmed{display:flex;gap:8px;border-radius:10px;padding:12px;background:#eef8f2;color:#267451}.pickup-confirmed strong{font-size:calc(11px * var(--font-scale,1))}.pickup-confirmed p{font-size:calc(10px * var(--font-scale,1));line-height:1.7;margin-top:6px}.pickup-confirmed button{font-size:calc(10px * var(--font-scale,1));margin-top:12px}.pickup-privacy{display:flex;gap:8px;align-items:flex-start;margin:21px 0 0;color:var(--muted)}.pickup-privacy p{font-size:calc(10px * var(--font-scale,1));line-height:1.7}.pickup-scan-line{position:absolute;inset:0 0 auto;height:3px;background:#b4ffdc;box-shadow:0 0 24px 10px #8df1bd55;animation:pickup-scan 2.4s ease-in-out;pointer-events:none}@keyframes pickup-scan{from{top:0}to{top:100%}}
 @media(max-width:650px){.pickup-guide{padding:18px 16px}.explorer-tabs{padding:12px 16px 0}.explorer-tabs button{flex:1;font-size:calc(11px * var(--font-scale,1));padding:11px 8px}.pickup-heading h3{font-size:calc(26px * var(--font-scale,1))}.pickup-steps{gap:9px;font-size:calc(9px * var(--font-scale,1));justify-content:space-between}.pickup-steps li{gap:5px}.pickup-workspace{grid-template-columns:1fr}.pickup-location{padding:12px 10px;gap:8px}.pickup-location>a{font-size:calc(10px * var(--font-scale,1))}.pickup-location strong{font-size:calc(11px * var(--font-scale,1))}.pickup-empty{padding:25px 12px 18px}.pickup-box>span{font-size:calc(8px * var(--font-scale,1))}}
 @media(prefers-reduced-motion:reduce){.pickup-scan-line{animation:none;top:50%}}body[data-motion=true] .pickup-scan-line{animation:none;top:50%}body[data-theme=dark] :is(.pickup-entry,.pickup-empty,.pickup-camera){background:#233147;border-color:#3a4d68}body[data-theme=dark] .explorer-tabs button[aria-pressed=true]{background:#233b60;color:#bfd7ff}body[data-theme=dark] .pickup-confirmed{background:#203e36;color:#a3dbc2}body[data-contrast=true] :is(.pickup-heading>p,.pickup-image-caption,.pickup-ai p,.pickup-ai small,.pickup-privacy,.pickup-entry small){color:var(--ink)}
+
+/* SpacetimeDB live sync (components/live-sync.tsx, live-sync-panel.tsx). The "live" label shows only while connected and subscribed. */
+.stdb-chip{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:26px;margin-top:-6px;padding:3px 10px;border-radius:13px;background:var(--ux-soft);color:var(--ux-ink);font-size:calc(12px * var(--font-scale,1));font-weight:600}
+.stdb-chip i,.live-sync-status i{width:7px;height:7px;border-radius:50%;background:#8a8a8a;flex-shrink:0}
+.stdb-chip i,.live-sync-status.live i{background:var(--ux-green)}.live-sync-status.connecting i{background:var(--ux-amber)}.live-sync-status.error i{background:var(--ux-red)}
+.stdb-shared{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:14px;background:var(--ux-soft);color:var(--ux-ink);font-size:calc(13px * var(--font-scale,1));line-height:1.4}
+.stdb-shared svg{flex-shrink:0;margin-top:1px}
+.fleet.live-sync{min-height:0;padding:0 16px 24px}
+.live-sync-head{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+.live-sync-head h3{display:flex;align-items:center;gap:8px;margin:0}
+.live-sync-status{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:3px 10px;border-radius:13px;background:var(--ux-soft);font-size:calc(12px * var(--font-scale,1));font-weight:600}
+.live-sync-note{margin:0;color:var(--ux-muted);font-size:calc(13px * var(--font-scale,1));line-height:1.45}
+.live-sync .fleet-tiles.live-sync-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+.live-sync-tiles strong.live-sync-kind{font-size:calc(16px * var(--font-scale,1));line-height:1.35}
+.live-sync-sub{margin:4px 0 0;font-size:calc(14px * var(--font-scale,1));font-weight:700}
+.live-sync-drones{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.live-sync-drones li{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:12px;background:var(--ux-soft);min-width:0}
+.live-sync-drones li.stale{outline:1px dashed var(--ux-muted);outline-offset:-1px}
+.live-sync-drones li>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.live-sync-drones li strong{overflow-wrap:anywhere}
+.live-sync-drones small{color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1));line-height:1.5}.live-sync-drones small svg{display:inline-block;vertical-align:-2px}
+.live-sync-tag{padding:1px 8px;border-radius:10px;background:var(--ux-ink);color:var(--ux-bg);font-size:calc(11px * var(--font-scale,1));font-weight:600}
+@media(max-width:760px){.fleet.live-sync{padding:0 12px 20px}.live-sync .fleet-tiles.live-sync-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
