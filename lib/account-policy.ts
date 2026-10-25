@@ -8,8 +8,10 @@ export function accountOwner(id:string){
 export function sameOrigin(request:Request){return request.headers.get('origin')===new URL(request.url).origin;}
 export function authOutcome(search:string){
   const value=new URLSearchParams(search).get('auth');
-  return value==='success'?'You’re signed in. This account has its own return history.':value==='cancelled'?'Sign-in was cancelled. Your demo is still available.':value==='failed'?'Sign-in did not complete. Please try again.':null;
+  return value==='success'?'You’re signed in. This account has its own return history.':value==='cancelled'?'Sign-in was cancelled. Your demo is still available.':value==='expired'?'That email link has expired or was already used. Sign in with your email and password.':value==='failed'?'Sign-in did not complete. Please try again.':null;
 }
+// Supabase sends an expired or already-used email link back with error_code=otp_expired (in the query for PKCE); any other error, such as a cancelled Google sign-in, is a cancel.
+export function callbackErrorOutcome(params:URLSearchParams){return params.get('error_code')==='otp_expired'?'expired':'cancelled';}
 
 // Email and password accounts (POST /api/account/password). Client-safe and pure, so the panel and tests share the rules.
 // Messages are fixed strings: they never echo the email or password back.

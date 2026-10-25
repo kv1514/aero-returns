@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {allowedProvider,accountOwner,sameOrigin,authOutcome} from '../lib/account-policy';
+import {allowedProvider,accountOwner,sameOrigin,authOutcome,callbackErrorOutcome} from '../lib/account-policy';
 import {verifyAccountUser} from '../lib/verified-identity';
 import {earthURL,streetViewURL} from '../lib/map-links';
 test('only the intended OAuth providers can start a sign-in and origin must match',()=>{
@@ -21,6 +21,12 @@ test('expired or rejected sessions cannot fall back to a different owner',async(
   await assert.rejects(verifyAccountUser(async()=>({data:{user:null},error:new Error('expired')})),/session expired/);
   await assert.rejects(verifyAccountUser(async()=>({data:{user:{id:'11111111-1111-4111-8111-111111111111'}},error:new Error('revoked')})),/session expired/);
   assert.equal(authOutcome('?auth=<script>alert(1)</script>'),null);
+});
+test('an expired or used email link says so, while a cancelled Google sign-in still reads as cancelled',()=>{
+  assert.equal(callbackErrorOutcome(new URLSearchParams('error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired')),'expired');
+  assert.equal(callbackErrorOutcome(new URLSearchParams('error=access_denied&error_description=The+user+denied+access')),'cancelled');
+  assert.match(authOutcome('?auth=expired')!,/expired or was already used/);
+  assert.match(authOutcome('?auth=cancelled')!,/cancelled/);
 });
 test('Earth and Street View use encoded coordinates without API credentials',()=>{
   const u=new URL(streetViewURL([-122.27,37.869]));
