@@ -1,0 +1,603 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&display=swap');
+/* Ride-hailing style layer: full-bleed map, floating controls, one trip sheet. Loaded after globals.css. */
+.ux,.fleet{--ux-bg:#fff;--ux-ink:#000;--ux-muted:#5e5e5e;--ux-line:#e8e8e8;--ux-soft:#f3f3f3;--ux-green:#06c167;--ux-red:#e11900;--ux-amber:#ffc043;--ux-blue:#276ef1;--ux-shadow:0 4px 16px rgba(0,0,0,.12);--ux-font:'Inter',var(--font);--ux-head:'Inter Tight','Inter',var(--font);font-family:var(--ux-font);color:var(--ux-ink)}
+body[data-theme=dark] :is(.ux,.fleet){--ux-bg:#141414;--ux-ink:#f6f6f6;--ux-muted:#a6a6a6;--ux-line:#2c2c2c;--ux-soft:#222;--ux-shadow:0 4px 18px rgba(0,0,0,.5)}
+body[data-contrast=true] :is(.ux,.fleet){--ux-muted:#2f2f2f;--ux-line:#8a8a8a}
+body[data-theme=dark][data-contrast=true] :is(.ux,.fleet){--ux-muted:#d9d9d9}
+body[data-font=true] :is(.ux,.fleet){--ux-font:var(--font);--ux-head:var(--font)}
+.ux h1,.ux h2,.ux h3,.fleet h1,.fleet h2,.fleet h3{font-family:var(--ux-head);letter-spacing:-.02em}
+.ux button:focus-visible,.ux a:focus-visible,.fleet :is(button,a,input,select):focus-visible{outline:3px solid var(--ux-blue);outline-offset:2px}
+.aero-app.ux{background:var(--ux-soft)}
+.ux .ux-stage{height:100dvh}
+
+
+/* Top bar */
+.ux-top{position:absolute;top:16px;left:16px;right:16px;z-index:12;display:flex;justify-content:space-between;align-items:center;gap:12px;pointer-events:none}
+.ux-top>*{pointer-events:auto}
+.ux-brand{display:flex;align-items:center;gap:8px;height:44px;padding:0 16px 0 12px;background:var(--ux-bg);border-radius:22px;box-shadow:var(--ux-shadow);font:800 calc(18px * var(--font-scale,1))/1 var(--ux-head);letter-spacing:.12em}
+.ux-brand .brand-symbol{width:24px;height:24px;color:var(--ux-ink)}
+.ux-top-actions{display:flex;align-items:center;gap:8px}
+.ux-round{width:44px;height:44px;border-radius:50%;background:var(--ux-bg);box-shadow:var(--ux-shadow);display:inline-flex;align-items:center;justify-content:center;color:var(--ux-ink);position:relative;flex-shrink:0;text-decoration:none}
+.ux-round:hover{background:var(--ux-soft)}
+.ux-round.light{box-shadow:none;border:1px solid var(--ux-line);width:40px;height:40px}
+.ux-round.notifications i{position:absolute;top:10px;right:11px;width:8px;height:8px;border-radius:50%;background:var(--ux-red);border:2px solid var(--ux-bg)}
+.ux-pill{height:44px;padding:0 18px;border-radius:22px;background:var(--ux-ink);color:var(--ux-bg);display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:calc(15px * var(--font-scale,1));box-shadow:var(--ux-shadow)}
+.ux-avatar{width:44px;height:44px;border-radius:50%;background:var(--ux-ink);color:var(--ux-bg);display:inline-flex;align-items:center;justify-content:center;box-shadow:var(--ux-shadow)}
+.ux-chip{height:32px;display:inline-flex;align-items:center;gap:8px;padding:0 12px;border-radius:16px;background:var(--ux-bg);box-shadow:var(--ux-shadow);font-size:calc(13px * var(--font-scale,1));font-weight:600;white-space:nowrap}
+.ux-chip i{width:8px;height:8px;border-radius:50%;background:#9a9a9a}
+.ux-chip-short{display:none}
+@media(max-width:359px){.ux-chip.sim .ux-chip-full{display:none}.ux-chip.sim .ux-chip-short{display:inline}}
+.ux-chip.live{background:var(--ux-ink);color:var(--ux-bg)}
+.ux-chip.live i{background:var(--ux-red);animation:ux-pulse 1.4s ease-in-out infinite}
+.ux-chip.live.stale{background:var(--ux-amber);color:#000}.ux-chip.live.stale i{background:#000;animation:none}
+@keyframes ux-pulse{0%,100%{box-shadow:0 0 0 0 rgba(225,25,0,.6)}50%{box-shadow:0 0 0 6px rgba(225,25,0,0)}}
+
+/* Map overlays */
+.ux-map-chips{position:absolute;top:76px;right:72px;z-index:6;display:flex;gap:6px}
+.ux-map-chips span{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:16px;background:var(--ux-bg);box-shadow:var(--ux-shadow);font-weight:600;font-size:calc(13px * var(--font-scale,1));font-variant-numeric:tabular-nums}
+.ux-map-chips span.muted{color:var(--ux-muted);font-weight:500}
+.ux .map-controls{top:76px;right:16px;border:0;border-radius:12px;box-shadow:var(--ux-shadow);background:var(--ux-bg)}
+.ux .map-controls button{color:var(--ux-ink);width:44px;height:44px}
+.ux .map-controls button:hover,.ux .map-controls button.active{background:var(--ux-soft);color:var(--ux-ink)}
+.ux .map-view-controls{flex-direction:row;bottom:24px;left:calc(432px + (100% - 432px)/2);transform:translateX(-50%);border:0;border-radius:22px;box-shadow:var(--ux-shadow);background:var(--ux-bg);padding:4px}
+.ux .map-view-controls button{font-size:calc(13px * var(--font-scale,1));font-weight:600;color:var(--ux-ink);padding:9px 14px;border-radius:22px;min-height:44px}
+.ux .map-view-controls button.selected{background:var(--ux-ink);color:var(--ux-bg)}
+.ux .map-attribution{bottom:4px;right:6px;font-size:calc(10px * var(--font-scale,1));z-index:6;background:var(--ux-bg);color:var(--ux-muted)}
+.ux .map-attribution a{color:inherit}
+.ux-float{position:absolute;z-index:8;display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:22px;background:var(--ux-bg);box-shadow:var(--ux-shadow);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
+.ux-float.earth{right:16px;bottom:24px}
+.ux-float.demo{left:432px;bottom:24px}
+.ux-float .turned{transform:rotate(180deg)}
+.ux .simulator-panel.ux-panel{left:432px;bottom:72px;border:0;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.18);background:var(--ux-bg);color:var(--ux-ink)}
+.ux .simulator-panel.ux-panel p{font-size:calc(12px * var(--font-scale,1))}
+/* Demo controls: the legacy panel set its text at 8–11px grey and its links 14px tall; readable text and 32px targets in both themes. */
+.ux .simulator-panel.ux-panel p,.ux .simulator-panel.ux-panel>small{color:var(--ux-muted);font-size:calc(13px * var(--font-scale,1))}
+.ux .simulator-panel.ux-panel .sim-speeds button{min-height:32px;padding:4px;background:var(--ux-soft);color:var(--ux-ink);font-size:calc(13px * var(--font-scale,1));font-weight:600}
+.ux .simulator-panel.ux-panel .sim-speeds button.selected{background:var(--ux-ink);color:var(--ux-bg)}
+.ux .simulator-panel.ux-panel .secondary.small{min-height:36px;font-size:calc(13px * var(--font-scale,1))}
+.ux .simulator-panel.ux-panel :is(.demo-link,.sim-bottom button){min-height:32px;margin:0;color:var(--ux-ink);font-size:calc(13px * var(--font-scale,1));font-weight:600}
+.ux .simulator-panel.ux-panel .demo-link{margin-top:6px}
+.ux .simulator-panel.ux-panel .sim-bottom{margin-top:0;gap:12px}
+.ux .simulator-panel.ux-panel .sim-bottom button{text-decoration:underline}
+.ux .ux-error{top:76px;left:432px;transform:none;font-size:calc(13px * var(--font-scale,1));border-radius:12px}
+/* Below the header row (16–60px; 12–56px on phones), so a toast never covers its controls. */
+.ux~.toast,.ux .toast,.toast{top:72px;border-radius:12px;background:#000;font-size:calc(14px * var(--font-scale,1))}
+
+/* Map markers */
+.ux .place-marker>div{background:var(--ux-ink);color:var(--ux-bg);border:3px solid var(--ux-bg);box-shadow:0 2px 8px rgba(0,0,0,.3);width:36px;height:36px}
+.ux .place-marker.hub>div{border-radius:8px}
+.ux .place-marker span,.ux .google-place-pin{background:var(--ux-bg);color:var(--ux-ink);border:0;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.18);font:600 calc(12px * var(--font-scale,1))/1 var(--ux-font);padding:6px 8px}
+.ux .drone-marker-label{border:0;border-radius:6px;background:var(--ux-ink);color:var(--ux-bg);font:700 calc(12px * var(--font-scale,1))/1 var(--ux-font);letter-spacing:.02em;padding:6px 8px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.ux .drone-pulse{background:radial-gradient(circle,rgba(39,110,241,.25),rgba(39,110,241,0) 70%)}
+
+/* Trip sheet */
+.ux-sheet{position:absolute;z-index:10;left:16px;top:76px;bottom:16px;width:400px;background:var(--ux-bg);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.16);overflow:hidden;display:flex;flex-direction:column}
+.ux-handle{display:none}
+.ux-sheet-scroll{overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;overscroll-behavior:contain}
+.ux-eyebrow{font-size:calc(12px * var(--font-scale,1));color:var(--ux-muted);font-weight:500}
+.ux-eta{display:flex;gap:16px;align-items:flex-start;justify-content:space-between}
+.ux-eta h1{font-size:calc(28px * var(--font-scale,1));line-height:1.1;font-weight:700;margin:6px 0 6px}
+.ux-eta p{font-size:calc(15px * var(--font-scale,1));color:var(--ux-muted);line-height:1.4}
+.ux-eta-badge{flex-shrink:0;width:76px;height:76px;border-radius:16px;background:var(--ux-ink);color:var(--ux-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.ux-eta-badge strong{font:800 calc(32px * var(--font-scale,1))/1 var(--ux-head)}
+.ux-eta-badge small{font-size:calc(13px * var(--font-scale,1));font-weight:600;margin-top:2px}
+/* Keep the inverted badge colour: outranks the legacy !important `small` colours for dark/contrast (up to 0,3,3). */
+body:is([data-theme],[data-contrast]) .ux .ux-eta>.ux-eta-badge small{color:inherit!important}
+.ux-eta-badge.done{background:var(--ux-green);color:#fff}
+.ux-eta-badge.warn{background:var(--ux-amber);color:#000}
+.ux-progress{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ux-progress span{height:4px;border-radius:2px;background:var(--ux-line);overflow:hidden;position:relative}
+.ux-progress span i{position:absolute;inset:0;width:0;background:var(--ux-ink)}
+.ux-progress span.done i{width:100%}
+.ux-progress span.active i{width:45%;animation:ux-slide 1.6s ease-in-out infinite}
+@keyframes ux-slide{0%{transform:translateX(-100%)}100%{transform:translateX(230%)}}
+.ux-progress-labels{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:-10px}
+.ux-progress-labels small{font-size:calc(12px * var(--font-scale,1));color:var(--ux-muted)}
+.ux-progress-labels small.current{color:var(--ux-ink);font-weight:600}
+.ux-alert{display:flex;gap:10px;align-items:flex-start;background:#fff4d6;color:#000;border-radius:12px;padding:12px 14px;font-size:calc(14px * var(--font-scale,1));line-height:1.4}
+.ux-actions{display:flex}
+.ux-primary,.ux-secondary{width:100%;min-height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:10px;font-weight:600;font-size:calc(16px * var(--font-scale,1));padding:0 16px}
+.ux-primary{background:var(--ux-ink);color:var(--ux-bg)}
+.ux-secondary{background:var(--ux-soft);color:var(--ux-ink)}
+.ux-primary:hover:not(:disabled),.ux-secondary:hover:not(:disabled){filter:none;opacity:.88}
+.ux-courier{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:var(--ux-soft)}
+.ux-courier-avatar{width:56px;height:56px;border-radius:50%;background:var(--ux-bg);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.ux-courier-avatar svg{width:74px;height:auto;margin-top:6px}
+.ux-courier-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ux-courier-info strong{font-size:calc(16px * var(--font-scale,1));font-weight:700}
+.ux-courier-info span{font-size:calc(13px * var(--font-scale,1));color:var(--ux-muted);line-height:1.35}
+.ux-courier-state{display:inline-flex!important;align-items:center;gap:5px}
+.ux-courier-state i{width:8px;height:8px;border-radius:50%;background:#9a9a9a;margin-right:2px}
+.ux-courier-state i.flying{background:var(--ux-green);animation:ux-pulse-green 1.4s ease-in-out infinite}
+@keyframes ux-pulse-green{0%,100%{box-shadow:0 0 0 0 rgba(6,193,103,.6)}50%{box-shadow:0 0 0 5px rgba(6,193,103,0)}}
+.ux-stops{display:flex;flex-direction:column;gap:18px;position:relative;padding-left:4px}
+.ux-stops:before{content:'';position:absolute;left:9px;top:20px;bottom:30px;width:2px;background:var(--ux-ink)}
+.ux-stop{display:flex;gap:16px;align-items:flex-start}
+.ux-stop>div{flex:1;min-width:0}
+.ux-stop small{display:flex;align-items:center;gap:8px;font-size:calc(12px * var(--font-scale,1));color:var(--ux-muted)}
+.ux-stop strong{display:block;font-size:calc(15px * var(--font-scale,1));font-weight:600;margin-top:2px}
+.ux-stop p{font-size:calc(13px * var(--font-scale,1));color:var(--ux-muted)}
+.ux-dot,.ux-square{width:12px;height:12px;background:var(--ux-ink);margin-top:5px;flex-shrink:0;position:relative;z-index:1;box-shadow:0 0 0 3px var(--ux-bg)}
+.ux-dot{border-radius:50%}
+.ux-tag{display:inline-flex;align-items:center;gap:3px;background:#e7f8ef;color:#037a41;border-radius:4px;padding:2px 5px;font-size:calc(12px * var(--font-scale,1));font-weight:600}
+.ux-icon{width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--ux-ink)}
+.ux-icon:hover{background:var(--ux-soft)}
+.ux-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--ux-line);border-bottom:1px solid var(--ux-line);text-align:left;color:var(--ux-ink)}
+.ux-row>span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px}
+.ux-row strong{font-size:calc(15px * var(--font-scale,1));font-weight:600}
+.ux-row small{font-size:calc(13px * var(--font-scale,1));color:var(--ux-muted)}
+.ux-row-icon{width:44px;height:44px;border-radius:10px;background:var(--ux-soft);display:inline-flex;align-items:center;justify-content:center}
+.ux-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ux-tiles button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px;border-radius:12px;background:var(--ux-soft);text-align:left;color:var(--ux-ink);min-height:96px}
+.ux-tiles button svg{margin-bottom:6px}
+.ux-tiles strong{font-size:calc(13px * var(--font-scale,1));font-weight:600;line-height:1.2}
+.ux-tiles small{font-size:calc(12px * var(--font-scale,1));color:var(--ux-muted)}
+.ux-tiles button:hover{filter:none;background:var(--ux-line)}
+.ux-foot{display:flex;align-items:center;gap:8px;font-size:calc(12px * var(--font-scale,1));color:var(--ux-muted);padding-bottom:4px}
+.ux-foot span{flex:1}
+.ux-foot button,.ux-foot a{font-weight:600;color:var(--ux-ink);text-decoration:underline}
+.ux-foot-links{flex-wrap:wrap;gap:0 16px;padding-top:0}
+/* 44px tall targets for the footer links and Help, for older adults and less precise taps. */
+.ux-foot :is(button,a){display:inline-flex;align-items:center;min-height:44px}
+/* Headings that receive focus after Request (finding, matched, tracking) need no ring for pointer users. */
+.ux-sheet h1[tabindex]:focus:not(:focus-visible){outline:none}
+
+@media(max-width:1000px) and (min-width:761px){.ux-map-chips{display:none}.ux-sheet{width:360px}.ux-float.demo,.ux .simulator-panel.ux-panel,.ux .ux-error{left:392px}.ux .map-view-controls{left:calc(392px + (100% - 392px)/2)}}
+/* Below ~1066px the centred 3D/Follow group meets the Earth & Street View and Demo controls floats (bottom:24px, 40px tall): stack it above them. */
+@media(max-width:1240px) and (min-width:761px){.ux .map-view-controls{bottom:76px}}
+@media(max-width:760px){
+  .ux-top{top:12px;left:12px;right:12px;gap:8px}
+  .ux-top-actions{gap:6px;min-width:0}
+  /* Phones keep Accessibility and the Simulation / Live chip; My returns, Fleet and Flight updates are reached from the trip sheet instead, and the brand is icon-only, so the row fits. */
+  .ux-top-actions :is(.ux-round.returns,.ux-round.ux-fleet-entry),.ux-pill span{display:none}
+  .ux-top-actions:has(.ux-chip) .ux-round.notifications{display:none}
+  .ux-top-actions .ux-chip:not(.live){min-width:0;overflow:hidden;padding:0 10px;gap:6px;font-size:calc(12px * var(--font-scale,1))}
+  /* The label stays whole on phones: "Demo" for the demo account (and for everyone below 360px) instead of a clipped word. */
+  .ux-chip.sim.demo .ux-chip-full{display:none}.ux-chip.sim.demo .ux-chip-short{display:inline}
+  .ux-pill{width:44px;padding:0;justify-content:center}
+  .ux-pill,.ux-avatar{flex-shrink:0}
+  .ux-top-actions .ux-chip.live{min-width:0;overflow:hidden;padding:0 10px;gap:6px}
+  .ux-brand{width:44px;padding:0;gap:0;justify-content:center;font-size:0;letter-spacing:0;flex-shrink:0}
+  /* The telemetry row wraps instead of pushing the Simulated / Live label off narrow screens or at 130% text. */
+  .ux-map-chips{top:66px;left:12px;right:12px;flex-wrap:wrap;pointer-events:none}
+  .ux~.toast,.ux .toast,.toast{top:66px}
+  .ux-map-chips span{height:28px;font-size:calc(12px * var(--font-scale,1));padding:0 10px}
+  .ux .map-controls{top:104px;right:12px}
+  .ux .map-view-controls,.ux-float.earth{display:none}
+  .ux-sheet{left:0;right:0;top:auto;bottom:0;width:auto;border-radius:20px 20px 0 0;height:46dvh;transition:height .3s cubic-bezier(.2,.8,.2,1)}
+  .ux-sheet.open{height:88dvh}
+  .ux-handle{display:flex;justify-content:center;align-items:center;height:28px;flex-shrink:0;width:100%}
+  .ux-handle span{width:40px;height:5px;border-radius:3px;background:var(--ux-line)}
+  .ux-sheet-scroll{padding:4px 16px 24px}
+  .ux-eta h1{font-size:calc(24px * var(--font-scale,1))}
+  .ux-eta-badge{width:64px;height:64px}.ux-eta-badge strong{font-size:calc(26px * var(--font-scale,1))}
+  .ux-float.demo{left:12px;bottom:calc(46dvh + 12px)}
+  .ux .simulator-panel.ux-panel{left:12px;right:12px;width:auto;bottom:calc(46dvh + 60px)}
+  .ux .ux-error{top:104px;left:12px;right:64px}
+  .ux .map-attribution{bottom:calc(46dvh + 4px)}
+}
+/* Toasts over the map sit between the trip sheet (to 416px; 376px on tablets) and the map buttons (62px from the right; from 104px down on phones), below the telemetry row and any connection banner, so the Simulated / Live label stays readable.
+   anchor() follows the row when it wraps (320px, larger text), and the phone banner follows it too; without anchor(), fixed offsets. A toast inside a dialog keeps the rules above. */
+.ux-map-chips{anchor-name:--ux-chips}.ux .ux-error{anchor-name:--ux-error}
+.ux-stage~.toast{left:calc(50% + 177px);width:max-content;max-width:min(560px,calc(100vw - 500px))}
+@media(max-width:1000px) and (min-width:761px){.ux-stage~.toast{left:calc(50% + 157px);max-width:calc(100vw - 460px)}}
+@media(max-width:760px){.ux-stage~.toast{left:calc(50% - 26px);max-width:calc(100vw - 76px)}}
+@supports (top:anchor(--a bottom)){
+  .ux-stage~.toast{top:calc(max(anchor(--ux-chips bottom,calc(60px + var(--safe-top))),anchor(--ux-error bottom,0px)) + 12px);margin-top:0}
+  @media(max-width:760px){.ux-stage~.toast{top:calc(anchor(--ux-chips bottom,calc(58px + var(--safe-top))) + 8px)}.ux .ux-error{top:calc(anchor(--ux-chips bottom,calc(96px + var(--safe-top))) + 8px - var(--safe-top))}}
+}
+@supports not (top:anchor(--a bottom)){.ux-stage:has(.ux-map-chips)~.toast{top:120px}.ux-stage:has(.ux-error)~.toast{top:136px}@media(max-width:760px){.ux-stage:has(.ux-map-chips)~.toast{top:104px}}@media(max-width:359px){.ux-stage:has(.ux-map-chips)~.toast{top:138px}.ux:has(.ux-map-chips) .ux-error{top:138px}}}
+/* On a phone an expanded trip sheet or a connection banner leaves no room on the map, so the toast moves to the bottom edge. */
+@media(max-width:760px){.ux-stage:is(:has(.ux-sheet.open),:has(.ux-error))~.toast{top:auto;bottom:calc(16px + var(--safe-bottom));left:50%;max-width:calc(100vw - 24px)}}
+
+/* Request a drone: home, matching and matched sheets. */
+.ux-sim-label{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:3px 10px;border-radius:13px;background:var(--ux-soft);color:var(--ux-ink);font-size:calc(12px * var(--font-scale,1));font-weight:600}
+.ux-sim-label i{width:7px;height:7px;border-radius:50%;background:#8a8a8a;flex-shrink:0}
+.ux-sheet-label{display:none;margin-top:-6px}
+.ux-home,.ux-match{display:flex;flex-direction:column;gap:14px}
+.ux-home h1,.ux-match h1{font-size:calc(28px * var(--font-scale,1));line-height:1.1;font-weight:700;margin:0}
+.ux-home>p,.ux-match>p{font-size:calc(15px * var(--font-scale,1));color:var(--ux-muted);line-height:1.4;margin-top:-6px}
+.ux-where{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--ux-soft);text-align:left;color:var(--ux-ink);width:100%}
+.ux-where>span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ux-where small,.ux-nearest small{font-size:calc(12px * var(--font-scale,1));color:var(--ux-muted)}
+.ux-where strong{font-size:calc(15px * var(--font-scale,1));font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ux-where .ux-dot{margin-top:0;box-shadow:none}
+.ux-request{min-height:56px;font-size:calc(17px * var(--font-scale,1))}
+.ux-nearest{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;border:1px solid var(--ux-line)}
+.ux-nearest>span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ux-nearest strong{font-size:calc(14px * var(--font-scale,1));font-weight:600;line-height:1.35}
+.ux-glyph{width:40px;height:40px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1px var(--ux-line);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:6px}
+.ux-glyph svg{width:100%;height:100%}
+.ux-list{display:flex;flex-direction:column}
+.ux-list>.ux-row+.ux-row{border-top:0}
+a.ux-row{text-decoration:none}
+.ux-recent{display:flex;flex-direction:column;gap:8px}
+.ux-recent-head{display:flex;align-items:center;justify-content:space-between}
+.ux-recent-head h2{font-size:calc(17px * var(--font-scale,1));font-weight:700}
+.ux-recent-head button{font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink);text-decoration:underline;min-height:32px}
+.ux-actions.two{gap:8px}.ux-actions.two>*{flex:1;min-width:0}
+.ux-match-progress{height:6px;border-radius:3px;background:var(--ux-line);overflow:hidden;position:relative}
+.ux-match-progress i{position:absolute;inset:0;width:40%;background:var(--ux-ink);animation:ux-slide 1.2s ease-in-out infinite}
+.ux-match .ux-stop p{font-size:calc(13px * var(--font-scale,1));color:var(--ux-muted)}
+.ux-match .ux-stop small{font-size:calc(12px * var(--font-scale,1));color:var(--ux-muted)}
+.ux-match .ux-stop strong{display:block;font-size:calc(15px * var(--font-scale,1));font-weight:600;margin-top:2px}
+.ux-match.found .ux-courier-info span{color:var(--ux-ink)}
+.ux-match.found .ux-courier-info .ux-courier-state{color:var(--ux-muted)}
+/* Map: the simulated fleet standing by and the pulse while matching. No position on the root: MapLibre positions marker elements absolutely. */
+.sim-drone-marker{display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.sim-drone-icon{width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28);padding:4px}
+.sim-drone-icon svg{width:100%;height:100%}
+.sim-drone-marker span{position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#000;border-radius:5px;padding:4px 6px;font:600 calc(12px * var(--font-scale,1))/1 var(--ux-font,'Inter',sans-serif);box-shadow:0 1px 4px rgba(0,0,0,.22)}
+.sim-drone-marker.nearest .sim-drone-icon{width:40px;height:40px;padding:5px;box-shadow:0 0 0 3px #000,0 3px 10px rgba(0,0,0,.3)}
+.sim-drone-marker.nearest span{background:#000;color:#fff;font-weight:700}
+/* The nearest drone is usually right by the pickup: keep its name above the pickup pin (.place-marker is z-index 1). */
+.sim-drone-marker.nearest{z-index:2}
+.match-pulse{width:140px;height:140px;pointer-events:none}
+.match-pulse i{position:absolute;inset:0;border-radius:50%;border:2px solid #276ef1;background:rgba(39,110,241,.14);opacity:0;animation:match-pulse 1.8s ease-out infinite}
+.match-pulse i+i{animation-delay:.9s}
+.match-pulse b{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(39,110,241,.2)}
+@keyframes match-pulse{0%{transform:scale(.3);opacity:.9}100%{transform:scale(1);opacity:0}}
+/* Booking: choose a ride */
+.ride-list{display:flex;flex-direction:column;gap:8px;margin:4px 0 8px}
+.ride-option{display:flex;align-items:center;gap:14px;width:100%;padding:14px;border:2px solid var(--ux-line,#e8e8e8);border-radius:14px;text-align:left;background:var(--ux-bg,#fff);color:var(--ux-ink,#000)}
+.ride-option.selected{border-color:var(--ux-ink,#000)}
+.ride-option.ineligible{opacity:1;background:var(--ux-soft,#f3f3f3);cursor:not-allowed}
+.ride-option.ineligible :is(strong,.service-icon){opacity:.55}
+.ride-main{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+.ride-main strong{font-size:calc(16px * var(--font-scale,1));font-weight:700}
+.ride-main small{font-size:calc(13px * var(--font-scale,1));color:var(--ux-muted,#5e5e5e)}
+.ride-main .ride-eta{color:var(--ux-ink,#000);font-weight:600}
+.ride-option.ineligible .ride-eta{color:var(--ux-muted,#5e5e5e);font-weight:500}
+.ride-price{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font:700 calc(16px * var(--font-scale,1))/1.2 var(--ux-head,inherit);white-space:nowrap}
+.ride-price small{font:500 calc(12px * var(--font-scale,1))/1.2 var(--ux-font,inherit);color:var(--ux-muted,#5e5e5e)}
+.ride-note{display:flex;gap:8px;align-items:flex-start;font-size:calc(13px * var(--font-scale,1));line-height:1.45;color:var(--ux-muted,#5e5e5e);margin:6px 0 0}
+.ride-note svg{flex-shrink:0;margin-top:2px}.ride-note strong{color:var(--ux-ink,#000)}
+body[data-theme=dark] .ride-option{background:#1f2a3a;border-color:#3a4d68}
+body[data-theme=dark] .ride-option.selected{border-color:#f6f6f6}
+body[data-theme=dark] .ride-option.ineligible{background:#182435}
+@media(max-width:760px){.ux-sheet-label{display:flex}.ux-home h1,.ux-match h1{font-size:calc(24px * var(--font-scale,1))}.ride-option{padding:12px;gap:10px}.ride-option .service-icon{display:none}.ride-price{font-size:calc(15px * var(--font-scale,1))}}
+
+/* Fleet console */
+.fleet{min-height:100dvh;background:var(--ux-soft);font-size:calc(14px * var(--font-scale,1))}
+.fleet-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:20px;padding:12px 20px;background:var(--ux-bg);border-bottom:1px solid var(--ux-line)}
+.fleet-top h1{display:flex;align-items:center;gap:8px;font-size:calc(20px * var(--font-scale,1));font-weight:800;flex:1}
+.fleet-back{display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-weight:600;color:var(--ux-ink);padding:8px 12px;border-radius:18px;background:var(--ux-soft)}
+.fleet-setup{display:flex;gap:8px}
+.fleet-setup span{display:inline-flex;align-items:center;gap:6px;font-size:calc(12px * var(--font-scale,1));font-weight:600;padding:6px 10px;border-radius:14px;background:var(--ux-soft);color:var(--ux-muted)}
+.fleet-setup span i{width:8px;height:8px;border-radius:50%;background:#9a9a9a}
+.fleet-setup span.ok{color:var(--ux-ink)}.fleet-setup span.ok i{background:var(--ux-green)}.fleet-setup span.warn i{background:var(--ux-amber)}
+.fleet-body{display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px;align-items:start}
+.fleet-list{background:var(--ux-bg);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:8px;position:sticky;top:76px}
+.fleet-list-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.fleet-list-head h2{font-size:calc(18px * var(--font-scale,1))}
+.ux-pill.small{height:36px;padding:0 14px;font-size:calc(14px * var(--font-scale,1));box-shadow:none}
+.fleet-drone{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;text-align:left;color:var(--ux-ink);border:2px solid transparent;background:var(--ux-soft)}
+.fleet-drone.selected{border-color:var(--ux-ink)}
+.fleet-drone>span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.fleet-drone strong{font-weight:700}.fleet-drone small{color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1))}
+.fleet-dot{width:10px;height:10px;border-radius:50%;background:#9a9a9a;flex-shrink:0}
+.fleet-dot.live{background:var(--ux-green);animation:ux-pulse-green 1.4s infinite}.fleet-dot.stale{background:var(--ux-amber)}
+.fleet-batt{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-size:calc(12px * var(--font-scale,1))}
+.fleet-empty{display:flex;flex-direction:column;gap:12px;align-items:flex-start;padding:8px 0}
+.fleet-empty p,.fleet-note,.fleet-hint{color:var(--ux-muted);line-height:1.45}
+.fleet-note{display:flex;gap:8px;font-size:calc(12px * var(--font-scale,1));margin-top:8px}
+.fleet-hint{font-size:calc(13px * var(--font-scale,1))}
+.fleet-hint a{color:var(--ux-ink);font-weight:600}
+.fleet-main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.fleet-placeholder{background:var(--ux-bg);border-radius:16px;padding:48px;align-items:flex-start;gap:12px;color:var(--ux-muted)}
+.fleet-placeholder h2{color:var(--ux-ink);font-size:calc(24px * var(--font-scale,1))}
+.fleet-placeholder p{max-width:520px;line-height:1.5}
+.fleet-headline{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.fleet-headline h2{font-size:calc(28px * var(--font-scale,1));font-weight:800}
+.fleet-headline p{color:var(--ux-muted)}
+.fleet-link{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:18px;font-weight:600;background:var(--ux-bg);color:var(--ux-muted)}
+.fleet-link.live{background:var(--ux-ink);color:var(--ux-bg)}.fleet-link.stale{background:var(--ux-amber);color:#000}
+.fleet-notice{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:#e7f8ef;color:#035c31}
+.fleet-notice.error{background:#ffe9e5;color:#8a1300}
+.fleet-notice span{flex:1}.fleet-notice button{font-size:20px;line-height:1;color:inherit}
+.fleet-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fleet-card{background:var(--ux-bg);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.fleet-card h3{font-size:calc(16px * var(--font-scale,1));font-weight:700}
+.fleet-card.map-card{padding:0;overflow:hidden;grid-row:span 2;position:relative;min-height:420px}
+.fleet-card .fleet-map{position:absolute;inset:0}
+.fleet-map.placing{cursor:crosshair}.fleet-map.placing canvas{cursor:crosshair}
+.fleet-place{position:absolute;left:12px;right:12px;bottom:12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;z-index:2}
+.fleet-place span{background:var(--ux-ink);color:var(--ux-bg);padding:8px 12px;border-radius:16px;font-weight:600;font-size:calc(13px * var(--font-scale,1))}
+.fleet-place button{display:inline-flex;align-items:center;gap:6px;background:var(--ux-bg);border-radius:16px;padding:8px 12px;font-weight:600;font-size:calc(13px * var(--font-scale,1));box-shadow:var(--ux-shadow);color:var(--ux-ink)}
+/* The label hangs below the icon (the .maplibregl-marker element is its absolute containing block), so a centre-anchored marker sits on the icon centre. */
+.fleet-pin{display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.fleet-pin i{width:18px;height:18px;border-radius:50%;background:#000;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.fleet-pin.pad i{border-radius:4px;background:#276ef1}.fleet-pin.pad.drop i{background:#06c167}
+.fleet-pin span{position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#fff;color:#000;font:600 11px/1 var(--ux-font,'Inter',sans-serif);padding:4px 6px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.2);white-space:nowrap}
+.fleet-pin.drone i{width:0;height:0;border:0;border-radius:0;background:none;box-shadow:none;border-left:10px solid transparent;border-right:10px solid transparent;border-bottom:22px solid #000;filter:drop-shadow(0 0 2px #fff) drop-shadow(0 2px 4px rgba(0,0,0,.35))}
+.fleet-tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.fleet-tiles>div{background:var(--ux-soft);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:2px}
+.fleet-tiles span{display:inline-flex;align-items:center;gap:6px;color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1))}
+.fleet-tiles strong{font:800 calc(22px * var(--font-scale,1))/1.2 var(--ux-head);font-variant-numeric:tabular-nums}
+.fleet-tiles strong small{font-size:calc(13px * var(--font-scale,1));color:var(--ux-muted)}
+.fleet-tiles>div>small{color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1))}
+.fleet-pads{display:grid;gap:6px;margin:0}
+.fleet-pads div{display:flex;justify-content:space-between;gap:12px;font-size:calc(13px * var(--font-scale,1))}
+.fleet-pads dt{color:var(--ux-muted)}.fleet-pads dd{margin:0;font-variant-numeric:tabular-nums;text-align:right}
+.fleet-row-buttons{display:flex;gap:6px;flex-wrap:wrap}
+.fleet-row-buttons button{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:16px;background:var(--ux-soft);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
+.fleet-row-buttons button.danger{background:#ffe9e5;color:#a51400}
+.fleet-phase{display:flex;flex-direction:column;gap:4px}
+.fleet-phase span{font:800 calc(20px * var(--font-scale,1))/1.2 var(--ux-head)}
+.fleet-phase span.warn{color:#a35f00}
+.fleet-phase small{color:var(--ux-muted)}
+.fleet-mission-buttons{display:flex;flex-direction:column;gap:8px}
+.fleet select,.fleet-form input{height:46px;border-radius:10px;border:1px solid var(--ux-line);background:var(--ux-bg);color:var(--ux-ink);padding:0 12px;font:inherit;width:100%}
+.fleet-armed{display:flex;align-items:center;gap:10px;background:#e7f8ef;color:#035c31;border-radius:12px;padding:12px}
+.fleet-armed span{flex:1;font-weight:600}
+.fleet-armed button{font-weight:600;text-decoration:underline;color:inherit}
+.fleet-check{display:flex;gap:10px;align-items:flex-start;line-height:1.4;font-size:calc(13px * var(--font-scale,1));cursor:pointer}
+.fleet-check input{width:18px;height:18px;margin-top:1px;accent-color:#000;flex-shrink:0}
+.fleet-command-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.fleet-command-grid button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:12px;background:var(--ux-soft);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
+.fleet-abort{display:flex;align-items:center;justify-content:center;gap:10px;min-height:56px;border-radius:12px;background:var(--ux-red);color:#fff;font:800 calc(18px * var(--font-scale,1))/1 var(--ux-head);letter-spacing:.06em}
+.fleet-abort:hover:not(:disabled){filter:brightness(.92)}
+.fleet-card.log{grid-column:1/-1;overflow-x:auto}
+.fleet table{width:100%;border-collapse:collapse;font-size:calc(13px * var(--font-scale,1))}
+.fleet th{text-align:left;color:var(--ux-muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--ux-line)}
+.fleet td{padding:8px;border-bottom:1px solid var(--ux-line);font-variant-numeric:tabular-nums}
+.fleet-status{display:inline-block;padding:2px 8px;border-radius:10px;background:var(--ux-soft);font-weight:600;font-size:calc(12px * var(--font-scale,1))}
+.fleet-status.done{background:#e7f8ef;color:#035c31}.fleet-status.accepted,.fleet-status.sent{background:#e8f0fe;color:#1a4fbf}.fleet-status:is(.rejected,.failed,.expired){background:#ffe9e5;color:#8a1300}.fleet-status.superseded{color:var(--ux-muted)}
+.fleet-card.bridge{grid-column:1/-1}
+.fleet pre{background:#000;color:#e8e8e8;border-radius:12px;padding:14px;overflow-x:auto;font-size:calc(12px * var(--font-scale,1));line-height:1.5;margin:0;white-space:pre}
+.fleet code{font-size:.92em}
+.fleet-secret{display:flex;flex-direction:column;gap:14px;padding:4px 24px 24px;color:var(--ux-ink,#000);font-family:var(--ux-font,'Inter',sans-serif)}
+.fleet-secret pre{background:#000;color:#e8e8e8;border-radius:12px;padding:14px;overflow-x:auto;font-size:calc(12px * var(--font-scale,1));line-height:1.5;margin:0}
+.fleet-key{display:flex;gap:8px;align-items:center;background:var(--ux-soft,#f3f3f3);color:var(--ux-ink,#000);border-radius:10px;padding:10px 12px}
+.fleet-key code{flex:1;word-break:break-all;font-size:calc(13px * var(--font-scale,1))}
+.fleet-key button{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:inherit}
+.fleet-form{display:flex;flex-direction:column;gap:12px;padding:4px 24px 24px;font-family:var(--ux-font,'Inter',sans-serif)}
+.fleet-form label{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:calc(13px * var(--font-scale,1))}
+.fleet-form input{height:44px;border:1px solid #ddd;border-radius:10px;padding:0 12px;font:inherit;font-weight:400}
+.fleet-form fieldset{border:0;padding:0;margin:0;display:flex;gap:16px;align-items:center}
+.fleet-form legend{font-weight:600;font-size:calc(13px * var(--font-scale,1));margin-bottom:6px}
+.fleet-radio{flex-direction:row!important;align-items:center;gap:8px!important;font-weight:500!important}
+.fleet-radio input{height:auto;width:auto;accent-color:#000}
+.fleet-form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.fleet-form-row.three{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:1100px){.fleet-grid{grid-template-columns:1fr}.fleet-card.map-card{grid-row:auto;min-height:360px}}
+@media(max-width:760px){.fleet-body{grid-template-columns:1fr;padding:12px}.fleet-list{position:static}.fleet-top{flex-wrap:wrap;gap:10px}.fleet-setup{width:100%}.fleet-command-grid{grid-template-columns:repeat(2,1fr)}.fleet-form-row.three{grid-template-columns:1fr 1fr}}
+
+/* Dialogs: Tailwind's reset zeroes <dialog> margins, which pinned every modal to the top-left corner. */
+.modal{margin:auto;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.28)}
+.modal::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
+.modal-shell>header h2{font-family:var(--ux-head,'Inter Tight','Inter',sans-serif);font-weight:700;font-size:calc(18px * var(--font-scale,1));letter-spacing:-.01em}
+.modal :is(.primary){background:#000;border-radius:12px}
+/* One accent system across dialogs: black actions like the trip sheet. */
+:root{--blue:#000}
+body[data-theme=dark]{--blue:#f6f6f6}
+.primary{background:#000;box-shadow:none;border-radius:12px;font-weight:600}
+.primary:hover:not(:disabled){background:#262626;box-shadow:none}
+body[data-theme=dark] .primary{background:#f6f6f6;color:#000}
+body[data-theme=dark] .primary:hover:not(:disabled){background:#d9d9d9}
+body[data-theme=dark] .theme-options button{border-color:#3a4d68}
+body[data-theme=dark] .theme-options button.selected{background:#f6f6f6;color:#000;border-color:#f6f6f6}
+.secondary{border-radius:12px}
+.pickup-location{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+
+a.ux-primary,a.ux-secondary{text-decoration:none}
+.ux-signoff{margin:6px 0 0;padding:14px 0 6px;border-top:1px solid var(--ux-line);text-align:center;color:var(--ux-muted);font-size:calc(13px * var(--font-scale,1))}
+.ux-signoff b{color:var(--ux-ink);font:800 calc(13px * var(--font-scale,1)) var(--ux-head);letter-spacing:-.2px;margin-right:6px}
+.fleet-pin.pad.customer i{background:#ff6937;border-radius:50%}
+.fleet-landing{display:flex;gap:6px;align-items:flex-start}.fleet-landing svg{flex:none;margin-top:2px}.fleet-landing.pin{color:var(--ux-ink);font-weight:600}
+
+/* Dialog content. The legacy sheet set much of it at 8–11px in pale grey-blue (about 2.6:1); readable sizes and at least 4.5:1 in light, dark and high contrast. */
+.modal{--m-ink:#000;--m-bg:#fff;--m-muted:#555;--m-chip:#eef1f5;--m-ok:#03703c;--m-ok-bg:#e7f8ef;--m-bad:#a51400;--m-warn:#7a5200;--m-warn-bg:#faf5e9}
+body[data-theme=dark] .modal{--m-ink:#f2f5fa;--m-bg:#182435;--m-muted:#bdc7d5;--m-chip:#2c3b52;--m-ok:#a6e9c6;--m-ok-bg:#1d3a2e;--m-bad:#ffb4a8;--m-warn:#ffd58a;--m-warn-bg:#3a2f1a}
+body[data-contrast=true] .modal{--m-muted:#2b2b2b}
+body[data-theme=dark][data-contrast=true] .modal{--m-muted:#e8edf5}
+.modal .modal-shell :is(.body-copy,.how-steps p,.instruction-list p,.check-list li,.activity-list p,.empty-state p,.form-intro p,.receipt-content>p,.lookup-result p,.review-result>p,.amazon-heading p,.amazon-profile p,.amazon-steps p,.nearby-results p,.nearby-empty p,.pickup-empty>p,.pickup-ai p,.pickup-confirmed p,.pickup-privacy p,.draft-notice p,.access-row,.access-toggle,.integration-row p,.assistant-intro p,.price-breakdown>div,.detail-content dl>div,.facility-option strong,.review-box strong,.upload-zone strong,.history-list strong,.activity-list strong,.instruction-list strong,.history-tabs button),.modal .modal-shell :is(.about-content,.detail-content,.maps-settings) :is(details p,summary){font-size:calc(14px * var(--font-scale,1))!important;line-height:1.55}
+.modal .modal-shell :is(.fine-print,.inline-note,.status-pill,.history-status,.history-list small,.history-list>button>div>span,.history-stats span,.history-stats small,.activity-list time,.activity-heading small,.wizard-progress>div,.qr-actions a,.qr-actions .text-button,.text-button,.optional,.checkbox,.review-check,.receipt-paper dl>div,.large-package p,.danger-link,.service-option small,.facility-option small,.recommended,.section-heading>span,.review-box small,.booking-estimate,.simulation-note,.upload-zone small,.form-step label,.field-label,.address-options button,.address-options small,.address-options p,.how-steps small,.about-hero .eyebrow,.receipt-content>.eyebrow,.booking-summary>.eyebrow,.access-toggle small,.access-row strong,.theme-options button,.provider-label,.assistant-label,.assistant-tabs button,.photo-previews small,.review-recommendation small,.integration-row code,.integration-row>span,.error-note,.selected-pickup,.pickup-location small,.pickup-location>a,.pickup-location>label,.earth-status,.explorer-saved,.unverified-tag,.nearby-count,.nearby-results small,.nearby-links a,.nearby-filters label,.nearby-location>span,.pickup-image-caption,.pickup-adjust,.pickup-steps,.pickup-section-label,.pickup-kicker,.pickup-ai small,.pickup-confirmed button,.amazon-profile span,.amazon-profile small,.amazon-steps label,.small){font-size:calc(13px * var(--font-scale,1))!important}
+.modal .modal-shell :is(.primary,.secondary):not(.small){font-size:calc(15px * var(--font-scale,1))}
+.modal .modal-shell :is(.form-step input:not([type=checkbox]),.form-step select,.address-field input,.maps-settings input,.pickup-location input,.nearby-address input,.amazon-content input,.amazon-content select,.nearby-filters select,.assistant-input input,.assistant-label textarea){font-size:calc(16px * var(--font-scale,1))}
+.modal .modal-shell .wizard-progress{flex-wrap:wrap;gap:8px 18px}
+.modal .modal-shell :is(.body-copy,.fine-print,.inline-note,.how-steps p,.how-steps small,.instruction-list p,.check-list li,.activity-list p,.activity-list time,.activity-heading small,.empty-state,.empty-state p,.form-intro p,.receipt-content>p,.large-package,.large-package p,.history-list small,.history-list>button>div>span,.history-stats span,.history-stats small,.history-tabs button:not(.selected),.wizard-progress>div:not(.current),.qr-actions a,.optional,.service-option small,.facility-option small,.section-heading>span,.review-box small,.review-box>div,.booking-estimate,.booking-summary>p,.booking-summary>.eyebrow,.simulation-note,.upload-zone small,.form-step label,.field-label,.detail-content dt,.receipt-paper dt,.price-breakdown>div:not(.total),.access-row,.access-toggle,.access-toggle small,.access-row strong,.assistant-intro p,.assistant-label,.provider-label,.lookup-result p,.lookup-result dt,.review-result>p,.review-recommendation small,.integration-row p,.integration-row code,.about-hero .eyebrow,.amazon-heading p,.amazon-profile p,.amazon-profile span,.amazon-profile small,.amazon-steps p,.amazon-steps label,.nearby-results p,.nearby-empty p,.nearby-count,.nearby-filters label,.nearby-location>span,.pickup-empty>p,.pickup-empty>small,.pickup-ai p,.pickup-ai small,.pickup-privacy,.pickup-image-caption,.earth-status,.draft-notice p,.address-options small,.address-options p,.photo-previews small,.selected-pickup,.pickup-location small),.modal .modal-shell :is(.about-content,.detail-content,.maps-settings) :is(details p,summary){color:var(--m-muted)!important}
+.modal .modal-shell :is(.status-pill,.history-status,.recommended){color:var(--m-ok)!important;background:var(--m-ok-bg)!important}
+.modal .modal-shell .receipt-content>.eyebrow{color:var(--m-ok)!important}
+.modal .modal-shell :is(.facility-option strong,.review-box strong,.upload-zone strong,.service-option strong,.history-list strong,.activity-list strong,.instruction-list strong,.large-package h3,.about-hero h3,.booking-summary h3,.booking-estimate strong,.empty-state h3,.receipt-wordmark,.integration-row strong,.amazon-steps h4,.how-steps h4,.history-tabs button.selected,.wizard-progress .current,.price-breakdown .total,.text-button){color:var(--m-ink)!important}
+.modal .modal-shell .danger-link{color:var(--m-bad)!important;text-decoration:underline}
+.modal .modal-shell .error-note{color:#8a1300!important;background:#ffefe9}
+body[data-theme=dark] .modal .modal-shell .error-note{color:#ffd9d1!important;background:#3a1f1a}
+/* Legacy light chips and panels that have no dark rule of their own. */
+body[data-theme=dark] .modal .modal-shell :is(.draft-notice,.section-heading>span,.provider-label>span){background:#233147}
+body[data-theme=dark] .modal .modal-shell .provider-label>span{color:var(--m-muted)}
+/* Step numbers in the booking wizard and the pickup instructions. */
+.modal .modal-shell :is(.wizard-progress>div>span,.instruction-list li>span){font-size:calc(12px * var(--font-scale,1));background:var(--m-chip);color:var(--m-ink)}
+.modal .modal-shell .wizard-progress>div>span{width:22px;height:22px}
+.modal .modal-shell .wizard-progress .current>span{background:var(--m-ink);color:var(--m-bg)}
+.modal .modal-shell :is(.pickup-location details,.pickup-location summary,.pickup-adjust summary,.address-options button){color:var(--m-muted)!important;font-size:calc(13px * var(--font-scale,1))!important}
+.modal .modal-shell .pickup-ai h4{color:var(--m-ink)}
+/* What the layer above missed: the assistant's tabs, setup badges, photo picker and result, Maps settings, and the pickup guide and Earth explorer. */
+.modal .modal-shell .assistant-tabs button:not(.selected),.modal .modal-shell :is(.provider-label>span,.photo-previews>button,.photo-previews small,.maps-settings>label,.explorer-tabs button:not([aria-pressed=true]),.pickup-heading>p,.pickup-steps li:not(.active),.pickup-adjust label,.pickup-detection p,.pickup-kicker,.pickup-section-label,.pickup-image-caption){color:var(--m-muted)!important}
+.modal .modal-shell :is(.provider-label>span,.photo-previews small,.maps-settings code,.pickup-steps li>span,.pickup-box>span){font-size:calc(12px * var(--font-scale,1))!important}
+.modal .modal-shell :is(.photo-previews>button,.explorer-tabs button,.pickup-location strong,.pickup-empty>small,.pickup-empty>.text-button,.pickup-photo-toolbar>span,.pickup-adjust output,.pickup-detection strong,.pickup-confirmed strong,.pickup-confirmed p,.pickup-privacy p,.pickup-notes textarea,.pickup-ai button,.earth-targets button,.pickup-entry small,.explorer-saved){font-size:calc(13px * var(--font-scale,1))!important}
+.modal .modal-shell .photo-previews>button{background:var(--m-bg);border-color:var(--m-muted)}
+.modal .modal-shell .review-recommendation{color:var(--m-warn)}
+.modal .modal-shell .review-recommendation.good{color:var(--m-ok)}
+.modal .modal-shell .integration-row>span{color:var(--m-warn)!important;background:var(--m-warn-bg)}
+.modal .modal-shell .integration-row>span.configured{color:var(--m-ok)!important;background:var(--m-ok-bg)}
+body[data-theme=dark] .modal .modal-shell :is(.pickup-steps li.active,.pickup-location>a){color:#9cc0ff}
+body[data-theme=dark] .modal .modal-shell .pickup-steps li.active>span{background:#233b60;border-color:#3a5a8a}
+/* 44px targets for the dialogs' text buttons and disclosures (older adults, less precise taps). */
+.modal .modal-shell :is(.text-button,.danger-link,.pickup-location>a,.qr-actions>a){min-height:44px}
+.modal .modal-shell .qr-actions>a{display:inline-flex;align-items:center}
+.modal .modal-shell details>summary{padding:11px 0}
+.earth-explorer .fleet-pin span{font-size:calc(12px * var(--font-scale,1))}
+
+/* Booking wizard: calmer hierarchy, 44px targets, a drop-off that reads as information, and dark-mode borders that match the dialog. */
+.modal{--m-line:#dde3ea}
+body[data-theme=dark] .modal{--m-line:#334357}
+body[data-contrast=true] .modal{--m-line:#8a8a8a}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.nowrap{white-space:nowrap}
+/* Legacy light borders drew bright white rules on the dark dialog. */
+body[data-theme=dark] .modal .modal-shell :is(.wizard-progress,.wizard-footer,.facility-option,.price-breakdown .total,details,.access-row,.access-toggle){border-color:var(--m-line)}
+/* Focus: one 3px ring for fields and disclosures too (globals set outline:0 on inputs), and a clear border while typing. */
+.modal .modal-shell :is(input,select,textarea,summary,h3[tabindex]):focus-visible{outline:3px solid var(--ux-blue,#276ef1);outline-offset:2px}
+.modal .modal-shell .form-step :is(input:not([type=checkbox]),select):focus{border-color:var(--ux-blue,#276ef1);box-shadow:none}
+.modal .modal-shell .form-intro h3:focus:not(:focus-visible){outline:none}
+/* Close (X): 44px and full-contrast in both themes; the negative margin keeps the header height. */
+.modal-shell>header .icon-button{width:44px;height:44px;margin:-5px -10px -5px 0;border-radius:50%;color:var(--m-ink)}
+.modal-shell>header .icon-button:hover{background:var(--m-chip)}
+/* Draft notice: one line with a full-size Start over. */
+.modal .modal-shell .draft-notice{align-items:center;gap:8px;padding:4px 4px 4px 14px;margin-bottom:16px}
+.modal .modal-shell .draft-notice button{min-height:44px;padding:0 12px;font-weight:600}
+.modal .modal-shell .draft-privacy{margin:14px 0 0!important}
+/* Stepper: done, current and upcoming look different (not only check versus number). */
+.modal .modal-shell .wizard-progress>div.done{color:var(--m-ink)!important}
+.modal .modal-shell .wizard-progress>div.current{font-weight:700}
+.modal .modal-shell .wizard-progress>div.done>span{background:var(--m-chip);color:var(--m-ink);box-shadow:inset 0 0 0 1.5px var(--m-ink)}
+/* Step 1: the demo-script controls are full-size and easy to spot. */
+.modal .modal-shell .pickup-location .fine-print{margin:6px 0 8px!important}
+.modal .modal-shell .pickup-location details{margin:0;padding:0;border:0}
+.modal .modal-shell .pickup-location details>summary{padding:10px 0;color:var(--m-ink)!important;font-weight:600;font-size:calc(15px * var(--font-scale,1))!important}
+.modal .modal-shell .pickup-location .address-options button{min-height:44px;font-size:calc(14px * var(--font-scale,1))!important}
+.modal .modal-shell .pickup-location .address-options button[aria-current=true]{color:var(--m-ink)!important;font-weight:600}
+.modal .modal-shell .pickup-location>.text-button{justify-content:flex-start;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.modal .modal-shell .qr-actions{flex-wrap:wrap;gap:0 16px;margin-bottom:16px}
+.modal .modal-shell .qr-actions .text-button{font-weight:600;font-size:calc(15px * var(--font-scale,1))!important;text-decoration:underline;text-underline-offset:3px}
+.modal .modal-shell .qr-actions>a{white-space:nowrap}
+.modal .modal-shell .checkbox input{flex:none;width:calc(22px * var(--font-scale,1));height:calc(22px * var(--font-scale,1));margin:0;accent-color:var(--m-ink)}
+/* Choose a ride: a radio dot shows the chosen tier at a glance (phones hide the service icon). */
+.ride-option::before{content:'';flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--ux-muted,#5e5e5e);box-sizing:border-box}
+.ride-option.selected::before{border-color:var(--ux-ink,#000);background:radial-gradient(circle,var(--ux-ink,#000) 0 5px,transparent 5.5px)}
+.ride-option.ineligible::before{opacity:.4}
+body[data-theme=dark] .modal .ride-main .ride-eta{color:var(--m-ink)!important}
+body[data-theme=dark] .modal .ride-option.ineligible .ride-eta{color:var(--m-muted)!important}
+body[data-theme=dark] .ride-option .service-icon{background:#2c3b52;color:#cfe0ff}
+/* Drop-off: where the return goes. Information, not a picker: no border, hover, cursor or selected state. */
+.modal .modal-shell .section-heading{flex-wrap:wrap;gap:6px 10px;margin:26px 0 10px}
+.modal .modal-shell .section-heading h4{font-size:calc(17px * var(--font-scale,1));font-weight:700;letter-spacing:-.01em;color:var(--m-ink)}
+.modal .modal-shell .section-heading>.dropoff-sim{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:3px 10px;border-radius:13px;background:var(--m-chip);font-weight:600;white-space:nowrap}
+.modal .modal-shell .dropoff-sim i{width:7px;height:7px;border-radius:50%;background:#8a8a8a;flex:none}
+.modal .modal-shell .dropoff-match{display:flex;gap:12px;align-items:flex-start;padding:16px;border-radius:14px;background:var(--m-chip);color:var(--m-ink)}
+.modal .modal-shell .dropoff-match>svg{flex:none;margin-top:2px}
+.modal .modal-shell .dropoff-match>div{flex:1;min-width:0}
+.modal .modal-shell .dropoff-match small{display:block;font-size:calc(13px * var(--font-scale,1));font-weight:600;color:var(--m-muted)!important}
+.modal .modal-shell .dropoff-match strong{display:block;font-size:calc(18px * var(--font-scale,1));font-weight:700;line-height:1.3;margin:2px 0}
+.modal .modal-shell .dropoff-match span{display:block;font-size:calc(14px * var(--font-scale,1));line-height:1.45}
+.modal .modal-shell .dropoff-match p{margin:8px 0 0;font-size:calc(14px * var(--font-scale,1));line-height:1.5;color:var(--m-muted)}
+.modal .modal-shell .dropoff-none{padding:14px 16px;border-radius:14px;background:var(--m-warn-bg);color:var(--m-warn);font-size:calc(14px * var(--font-scale,1));font-weight:600;line-height:1.45}
+.modal .modal-shell .dropoff-others-title{margin:20px 0 4px;font-size:calc(14px * var(--font-scale,1));font-weight:700;color:var(--m-ink)}
+.modal .modal-shell .dropoff-others{list-style:none;margin:0;padding:0}
+.modal .modal-shell .dropoff-others li{padding:10px 0;border-top:1px solid var(--m-line)}
+.modal .modal-shell .dropoff-others li:last-child{border-bottom:1px solid var(--m-line)}
+.modal .modal-shell .dropoff-others strong{display:block;font-size:calc(15px * var(--font-scale,1));font-weight:600;color:var(--m-ink)}
+.modal .modal-shell .dropoff-others small{display:block;margin-top:2px;font-size:calc(14px * var(--font-scale,1));line-height:1.45;color:var(--m-muted)!important}
+/* Review & request: the required checkbox looks like the step's one task, and the review box loses its empty top and bottom. */
+.modal .modal-shell .form-step label.review-check{color:var(--m-ink)!important;font-size:calc(15px * var(--font-scale,1))!important;line-height:1.5;padding:14px;border:2px solid var(--m-line);border-radius:12px;gap:12px;margin-top:20px!important}
+.modal .modal-shell .form-step label.review-check:has(input:checked){border-color:var(--m-ink)}
+.modal .modal-shell .review-check input{margin-top:1px}
+.modal .modal-shell .review-box>div:first-child{margin-top:0}
+.modal .modal-shell .review-box>div:last-child{margin-bottom:0}
+.modal .modal-shell .review-sub{display:block;font-style:normal;font-size:calc(13px * var(--font-scale,1));color:var(--m-muted);margin-top:3px}
+/* Footer: Continue / Request stays in reach while the step scrolls; the hint says why Request is still off. */
+.modal .modal-shell .wizard-footer{position:sticky;bottom:0;z-index:4;flex-wrap:wrap;align-items:center;background:var(--m-bg);margin:18px -28px -26px;padding:14px 28px 16px}
+.modal:has(.wizard-footer){scroll-padding:76px 0 calc(var(--wizard-footer,112px) + 16px)}
+.modal .modal-shell .footer-hint{flex:1 1 100%;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:0 0 2px;font-size:calc(14px * var(--font-scale,1));font-weight:600;color:var(--m-ink)}
+.modal .modal-shell .footer-hint svg{flex:none}
+.modal .modal-shell .access-toggle input{flex:none;width:calc(22px * var(--font-scale,1));height:calc(22px * var(--font-scale,1));margin:0 0 0 12px}
+@media(max-width:760px){
+  .modal .modal-shell .wizard-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-bottom:16px;margin-bottom:18px}
+  .modal .modal-shell .wizard-progress>div{flex-direction:column;align-items:flex-start;gap:6px;line-height:1.25}
+  .modal .modal-shell .wizard-footer{margin:16px -20px -22px;padding:12px 20px 14px}
+  .modal .modal-shell .wizard-footer{gap:8px}
+  .modal .modal-shell .wizard-footer .primary{flex:1;min-width:0;min-height:52px;padding:6px 14px}
+  .modal .modal-shell .wizard-footer .secondary{flex:none;min-height:52px;padding:6px 14px}
+  .modal .modal-shell .footer-hint{justify-content:flex-start}
+  /* Phones (no service icon): dot | name + limits | price, with the ETA across the full width so it stays on one line. */
+  .ride-option{display:grid;grid-template-columns:22px minmax(0,1fr) auto;column-gap:10px;row-gap:3px;align-items:start}
+  .ride-option::before{grid-column:1;grid-row:1 / span 3;align-self:center}
+  .ride-option .ride-main{display:contents}
+  .ride-option .ride-main strong{grid-column:2;grid-row:1}
+  .ride-option .ride-main small:not(.ride-eta){grid-column:2;grid-row:2}
+  .ride-option .ride-main .ride-eta{grid-column:2 / 4;grid-row:3}
+  .ride-option .ride-price{grid-column:3;grid-row:1 / span 2;max-width:7.5em;white-space:normal;text-align:right}
+  /* Larger Text size (or a narrow phone): the price and "Demo · no charge" move to their own row under the ETA,
+     so the tier name, limits and ETA each keep one line instead of squeezing beside a wide price column. */
+  .ride-list{container-type:inline-size}
+  @container (max-width:19em){
+    .ride-option::before{grid-row:1 / span 4}
+    .ride-option .ride-price{grid-column:2 / 4;grid-row:4;max-width:none;flex-direction:row;align-items:baseline;gap:8px;text-align:left;margin-top:2px}
+  }
+}
+@media(max-width:480px){.modal .modal-shell .form-grid{grid-template-columns:1fr}}
+/* Narrow phones: the decorative arrow goes so "Request AirCart Standard" fits on one line beside Back. */
+@media(max-width:420px){.modal .modal-shell .wizard-footer .primary>svg{display:none}.modal .modal-shell .wizard-footer :is(.primary,.secondary){padding:6px 10px}}
+/* Your account: the email account form and the signed-in account's recent returns. Same dialog tokens, so light, dark, high contrast and Text size follow. */
+.account-panel{--acct-line:#dce4ee;--acct-field:#fff}
+body[data-theme=dark] .account-panel{--acct-line:#3a4d68;--acct-field:#233147}
+body[data-contrast=true] .account-panel{--acct-line:#6b7c93}
+body[data-theme=dark][data-contrast=true] .account-panel{--acct-line:#9fb0c8}
+.account-divider{display:flex;align-items:center;gap:12px;margin:18px 0 6px;color:var(--m-muted);font-size:calc(13px * var(--font-scale,1))}
+.account-divider::before,.account-divider::after{content:'';flex:1;border-top:1px solid var(--acct-line)}
+.account-email{display:flex;flex-direction:column;margin:8px 0 12px}
+.account-email h4,.account-recent h4{margin:0 0 12px;color:var(--m-ink);font-size:calc(16px * var(--font-scale,1));font-weight:650}
+/* Equal halves at normal size; a label never breaks inside its button (large Text size widens that one instead), and the switch stacks only if both cannot fit. */
+.account-mode{display:flex;flex-wrap:wrap;gap:4px;padding:4px;margin-bottom:14px;background:var(--m-chip);border-radius:12px}
+.account-mode button{flex:1 1 0;min-width:max-content;min-height:40px;padding:8px 10px;border-radius:9px;color:var(--m-muted);font-size:calc(14px * var(--font-scale,1));font-weight:550}
+.account-mode button[aria-pressed=true]{background:var(--m-bg);color:var(--m-ink);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.account-field{display:block;margin:10px 0 6px;color:var(--m-ink);font-size:calc(14px * var(--font-scale,1));font-weight:550}
+.account-input,.account-password{width:100%;min-height:46px;border:1px solid var(--acct-line);border-radius:10px;background:var(--acct-field);color:var(--m-ink)}
+.account-input{display:block;padding:11px 12px;font-size:calc(16px * var(--font-scale,1));min-width:0}
+.account-password{display:flex;align-items:stretch;overflow:hidden}
+.account-password input{flex:1;min-width:0;border:0;background:none;color:inherit;padding:11px 12px;font-size:calc(16px * var(--font-scale,1))}
+.account-password button{display:inline-flex;align-items:center;gap:6px;padding:0 14px;color:var(--m-ink);font-size:calc(13px * var(--font-scale,1));font-weight:550;border-left:1px solid var(--acct-line)}
+.account-input:focus-visible,.account-password:focus-within{outline:3px solid #91b6ff;outline-offset:1px}
+.account-password input:focus-visible,.account-password button:focus-visible{outline:0}
+.account-password button:focus-visible{text-decoration:underline}
+.account-hint{margin:6px 0 0;color:var(--m-muted);font-size:calc(13px * var(--font-scale,1))}
+.account-email>.primary{margin-top:16px}
+.account-email .error-note{margin-top:12px}
+.account-notice{margin:12px 0 0;padding:12px;border-radius:8px;color:var(--m-ok);background:var(--m-ok-bg);font-size:calc(14px * var(--font-scale,1));line-height:1.5}
+.account-email>.fine-print{margin:12px 0 4px!important}
+.account-signed-in{margin:14px 0 4px;color:var(--m-muted);font-size:calc(14px * var(--font-scale,1));overflow-wrap:anywhere}
+.account-signed-in strong{color:var(--m-ink);font-weight:600}
+.account-recent{margin:16px 0 4px}
+.account-recent ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--acct-line)}
+.account-recent li{border-bottom:1px solid var(--acct-line)}
+.account-recent a{display:flex;align-items:center;gap:12px;padding:12px 2px;color:var(--m-ink);text-decoration:none}
+.account-recent-icon{display:inline-flex;flex:none;padding:8px;border-radius:10px;background:var(--m-chip)}
+.account-recent-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.account-recent-text strong{font-size:calc(14px * var(--font-scale,1));font-weight:600}
+.account-recent-text small{color:var(--m-muted);font-size:calc(13px * var(--font-scale,1));overflow-wrap:anywhere}
+.account-recent .history-status{margin-left:auto;flex:none;border-radius:4px;padding:4px 7px;white-space:nowrap}
+.account-recent a>svg{flex:none;color:var(--m-muted)}
+.account-recent>.fine-print{margin:4px 0!important}
+
+/* Reduced motion, last so it outranks every animation above: the OS setting and AERO's own Reduce motion setting give the same stills.
+   Map camera moves read both in components/drone.tsx prefersReducedMotion. */
+@media(prefers-reduced-motion:reduce){.ux-progress span.active i,.ux-match-progress i{animation:none;width:100%;opacity:.5}.ux-chip.live i,.ux-courier-state i.flying,.fleet-dot.live{animation:none}.ux-sheet{transition:none}.match-pulse i{animation:none;opacity:.55;transform:scale(.7)}.spin{animation:none}}
+body[data-motion=true] :is(.ux-progress span.active i,.ux-match-progress i){animation:none;width:100%;opacity:.5}
+body[data-motion=true] .spin{animation:none}
+body[data-motion=true] :is(.ux-chip.live i,.ux-courier-state i.flying,.fleet-dot.live){animation:none}
+body[data-motion=true] .ux-sheet{transition:none}
+body[data-motion=true] .match-pulse i{animation:none;opacity:.55;transform:scale(.7)}
+/* Fleet: set a pad a few meters ahead of the drone's nose. */
+.fleet-ahead{align-items:center;margin-top:8px}
+.fleet-ahead>span{min-width:150px;font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
+.fleet-ahead button{min-height:40px}
+.fleet-nudge label{display:inline-flex;align-items:center;gap:8px;min-width:150px}
+.fleet-nudge select{min-height:40px;padding:0 10px;border-radius:12px;border:1px solid var(--ux-line,#e8e8e8);background:var(--ux-bg);color:var(--ux-ink);font-weight:600}
+.fleet-nudge button{min-width:44px;justify-content:center}
+.fleet-nudge small{color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1))}
+.fleet-map.editable .fleet-pin.home,.fleet-map.editable .fleet-pin.pad:not(.customer){cursor:grab}
+/* Fleet: the return picker and a one-tap test trip side by side. */
+.fleet-trip{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
+.fleet-trip select{flex:1 1 220px;min-width:0}
+.fleet-trip button{display:inline-flex;align-items:center;gap:6px;min-height:44px;white-space:nowrap}
+/* Fleet map on satellite imagery: leg lengths and Street View links. */
+.fleet-dist{padding:2px 7px;border-radius:10px;background:rgba(0,0,0,.72);color:#fff;font-weight:700;font-size:12px;white-space:nowrap;pointer-events:none}
+.fleet-sv{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:16px;background:var(--ux-soft);font-weight:600;font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink);text-decoration:none;min-height:40px}
+.fleet-map .maplibregl-ctrl-scale{background:rgba(255,255,255,.85);font-weight:600}
+/* Fleet: flight-plan analysis. */
+.fleet-plan{margin:12px 0;padding:12px 14px;border-radius:14px;background:var(--ux-soft)}
+.fleet-plan h4{margin:0 0 6px;font-size:calc(15px * var(--font-scale,1));color:var(--ux-ink)}
+.fleet-plan h4 small{display:block;font-weight:500;color:var(--ux-muted);font-size:calc(12px * var(--font-scale,1))}
+.fleet-plan ol{margin:0 0 6px;padding:0;list-style:none}
+.fleet-plan li{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--ux-line,#e8e8e8);font-size:calc(13px * var(--font-scale,1));color:var(--ux-ink)}
+.fleet-plan li span:last-child{color:var(--ux-muted);font-variant-numeric:tabular-nums}

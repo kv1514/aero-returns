@@ -1,166 +1,92 @@
-/** Live drone link: shared by the website, the device API, tests and the fake drone.
- * The drone's companion computer (see drone-agent/) talks to /api/drone/sync over 4G.
- * Every motion command is checked here on the server and again on the drone. */
-import { z } from 'zod';
-import { distance, pathDistance, type Point } from './simulation';
-import type { DeliveryJob } from './drone-jobs';
+/**
+ * AERO drone link v1. Compact signed text lines that fit one SMS segment, shared by the
+ * HTTPS polling and SMS transports. See docs/DRONE_LINK.md; bridge/aero_protocol.py mirrors this file.
+ */
+export const COMMAND_TYPES = ['PING', 'TAKEOFF', 'GOTO', 'HOLD', 'LAND', 'RTL', 'ABORT'] as const;
+export const DRONE_STATES = ['IDLE', 'ARMED', 'TAKEOFF', 'ENROUTE', 'HOLD', 'LANDING', 'LANDED', 'RTL', 'ERROR'] as const;
+export const ACK_STATUSES = ['ACCEPTED', 'DONE', 'REJECTED', 'FAILED'] as const;
+export type CommandType = typeof COMMAND_TYPES[number];
+export type DroneState = typeof DRONE_STATES[number];
+export type AckStatus = typeof ACK_STATUSES[number];
+export type Command = { droneId: string; seq: number; expires: number; type: CommandType; args: number[] };
+export type Telemetry = { droneId: string; seq: number; ts: number; lat: number; lon: number; alt: number; battery: number; heading: number; speed: number; fix: number; sats: number; state: DroneState; mode: string };
+export type Ack = { droneId: string; seq: number; ts: number; cmdSeq: number; status: AckStatus; reason?: string };
+export type DroneMessage = ({ kind: 'telemetry' } & Telemetry) | ({ kind: 'ack' } & Ack);
 
-export const ONLINE_MS = 10_000;
-export const FLY_EXPIRES_MS = 30_000;
-export const SAFETY_EXPIRES_MS = 120_000;
-export const MIN_BATTERY_PCT = 30;
-export const MAX_ROUTE_M = 5_000;
-export const LEGAL_MAX_ALT_M = 120; // FAA Part 107 ceiling (400 ft AGL)
-export const TRAIL_POINTS = 300;
-export const SMS_WINDOW_S = 300;
+export const DRONE_ID = /^[a-z0-9]{6,16}$/;
+const DECIMAL = /^-?\d{1,3}(?:\.\d{1,7})?$/, INTEGER = /^\d{1,16}$/, MODE = /^[A-Za-z0-9_.]{1,20}$/, REASON = /^[A-Z0-9_]{1,24}$/;
+const ARG_COUNT: Record<CommandType, number> = { PING: 0, TAKEOFF: 1, GOTO: 3, HOLD: 0, LAND: 0, RTL: 0, ABORT: 0 };
+/** [min, max] per argument. Altitudes are meters above home and never exceed the 120 m cap. */
+const ARG_RANGES: Partial<Record<CommandType, [number, number][]>> = { TAKEOFF: [[0, 120]], GOTO: [[-90, 90], [-180, 180], [0, 120]] };
 
-export const SAFETY_COMMANDS = ['HOLD', 'LAND', 'RTL'] as const;
-export type SafetyCommand = typeof SAFETY_COMMANDS[number];
-export type CommandType = 'FLY_ROUTE' | SafetyCommand | 'PING';
-export type CommandStatus = 'queued' | 'sent' | 'accepted' | 'done' | 'failed' | 'expired' | 'superseded';
-export type DroneState = 'idle' | 'arming' | 'taking_off' | 'en_route' | 'holding' | 'landing' | 'returning' | 'landed' | 'error';
-
-const lng = z.number().finite().min(-180).max(180), lat = z.number().finite().min(-90).max(90);
-export const pointSchema = z.tuple([lng, lat]);
-
-export const telemetrySchema = z.object({
-  lat, lng,
-  altM: z.number().finite().min(-50).max(1000),
-  headingDeg: z.number().finite().min(0).max(360),
-  groundSpeedMs: z.number().finite().min(0).max(100),
-  batteryPct: z.number().finite().min(0).max(100),
-  gpsFix: z.number().int().min(0).max(6),
-  satellites: z.number().int().min(0).max(64),
-  armed: z.boolean(),
-  mode: z.string().max(32),
-  state: z.enum(['idle', 'arming', 'taking_off', 'en_route', 'holding', 'landing', 'returning', 'landed', 'error']),
-  flightAllowed: z.boolean(),
-  link: z.enum(['4g', 'lte', '5g', 'wifi', 'ethernet', 'sim', 'other']).default('other'),
-  signalDbm: z.number().finite().min(-150).max(0).optional(),
-  activeCommandId: z.string().max(64).nullable().optional(),
-  waypointIndex: z.number().int().min(0).max(20).nullable().optional(),
-  message: z.string().max(200).optional(),
-  simulated: z.boolean().default(false),
-  agentVersion: z.string().max(32).optional(),
-  /** From a payload sensor or the gripper state when the drone has one; otherwise unknown. */
-  payload: z.enum(['loaded', 'empty', 'unknown']).default('unknown'),
-});
-export type Telemetry = z.infer<typeof telemetrySchema>;
-
-export const ackSchema = z.object({
-  commandId: z.string().max(64),
-  status: z.enum(['accepted', 'done', 'failed']),
-  message: z.string().max(200).optional(),
-});
-export const syncSchema = z.object({ telemetry: telemetrySchema, acks: z.array(ackSchema).max(20).default([]) });
-
-export const flyRouteSchema = z.object({
-  waypoints: z.array(pointSchema).min(1).max(10),
-  altM: z.number().finite().min(5).max(LEGAL_MAX_ALT_M),
-  speedMs: z.number().finite().min(1).max(15).default(6),
-  land: z.boolean().default(true),
-  /** After landing at the last waypoint, open the gripper to drop the package. */
-  release: z.boolean().default(false),
-});
-export type FlyRoute = z.infer<typeof flyRouteSchema>;
-
-export const commandRequestSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('FLY_ROUTE'), params: flyRouteSchema, pilotReady: z.literal(true, { errorMap: () => ({ message: 'Confirm a pilot with a remote controller is watching the drone.' }) }) }),
-  z.object({ type: z.enum(['HOLD', 'LAND', 'RTL', 'PING']) }),
-]);
-export type CommandRequest = z.infer<typeof commandRequestSchema>;
-
-export const droneSettingsSchema = z.object({
-  name: z.string().trim().min(1).max(40).optional(),
-  phone: z.string().trim().regex(/^\+[1-9]\d{6,14}$/, 'Use international format, like +14155550123.').or(z.literal('')).optional(),
-  geofenceM: z.number().int().min(50).max(3000).optional(),
-  maxAltM: z.number().int().min(10).max(LEGAL_MAX_ALT_M).optional(),
-  home: z.union([pointSchema, z.literal('current')]).optional(),
-});
-
-export type DroneConfig = { droneId: string; name: string; home: Point | null; geofenceM: number; maxAltM: number; minBatteryPct: number };
-export type DroneCommand = { id: string; type: CommandType; params: FlyRoute | null; status: CommandStatus; channel: 'internet' | 'sms'; createdAt: number; updatedAt: number; expiresAt: number; message: string | null; issuedBy?: string };
-export type DroneEvent = { id: string; jobId: string | null; kind: 'job' | 'command' | 'alert'; title: string; detail: string | null; at: number };
-export type DroneView = {
-  id: string; name: string; role: 'owner' | 'pilot'; online: boolean; lastSeen: number | null; telemetry: Telemetry | null; trail: Point[];
-  home: Point | null; geofenceM: number; maxAltM: number; phone: string | null; pilotCode: string | null; pilots: number; commands: DroneCommand[];
-  /** The active delivery, or the latest one from the last hour. */
-  job: DeliveryJob | null;
-  /** Newest first: delivery status changes, command results and drone alerts. */
-  events: DroneEvent[];
-};
-
-export const isSafety = (type: string): type is SafetyCommand => (SAFETY_COMMANDS as readonly string[]).includes(type);
-export const isOnline = (lastSeen: number | null, now: number) => lastSeen !== null && now - lastSeen <= ONLINE_MS;
-export const position = (t: Telemetry): Point => [t.lng, t.lat];
-
-/** The route the drone will actually fly: from where it is now, through every waypoint. */
-export function plannedPath(t: Telemetry | null, route: FlyRoute): Point[] {
-  return t ? [position(t), ...route.waypoints] : route.waypoints;
+const hex = (bytes: Uint8Array) => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+function unhex(value: string) {
+  if (!/^(?:[0-9a-f]{2})+$/.test(value)) throw new Error('Drone key must be lowercase hex.');
+  return Uint8Array.from(value.match(/../g)!, b => parseInt(b, 16));
 }
+async function hmac(key: Uint8Array<ArrayBuffer>, text: string) {
+  const k = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hex(new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(text))));
+}
+function sameText(a: string, b: string) { let diff = a.length ^ b.length; for (let i = 0; i < Math.min(a.length, b.length); i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i); return diff === 0; }
 
-/** Server-side preflight. Returns a reason the flight is refused, or null when it may be queued. */
-export function preflight(d: { home: Point | null; geofenceM: number; maxAltM: number; lastSeen: number | null; telemetry: Telemetry | null }, route: FlyRoute, now: number): string | null {
-  const t = d.telemetry;
-  if (!t || !isOnline(d.lastSeen, now)) return 'The drone is offline. Check its 4G connection and that the AERO agent is running.';
-  if (!t.flightAllowed) return 'The drone is in observe-only mode. Restart the agent with --allow-flight to accept flights.';
-  if (t.state === 'error') return 'The drone reported an error. Resolve it before flying.';
-  if (t.gpsFix < 3) return `Waiting for a 3D GPS fix (currently ${t.gpsFix}, ${t.satellites} satellites).`;
-  if (t.batteryPct < MIN_BATTERY_PCT) return `Battery is ${Math.round(t.batteryPct)}%. Charge above ${MIN_BATTERY_PCT}% before flying.`;
-  if (!d.home) return 'Set a home point before flying.';
-  if (route.altM > d.maxAltM) return `Altitude is above this drone's ${d.maxAltM} m limit.`;
-  const outside = route.waypoints.findIndex(p => distance(d.home!, p) > d.geofenceM);
-  if (outside >= 0) return `Point ${String.fromCharCode(65 + outside + (route.waypoints.length > 1 ? 0 : 1))} is outside the ${d.geofenceM} m safety zone around home.`;
-  if (distance(d.home, position(t)) > d.geofenceM + 50) return 'The drone is outside its safety zone. Bring it back manually.';
-  const length = pathDistance(plannedPath(t, route));
-  if (length > MAX_ROUTE_M) return `Route is ${(length / 1000).toFixed(1)} km. The limit is ${MAX_ROUTE_M / 1000} km.`;
+/** Per-drone 32-byte key derived from the Worker secret, so no drone key is stored in D1. */
+export async function deriveDroneKey(masterSecret: string, droneId: string, version: number) {
+  if (masterSecret.length < 32) throw new Error('DRONE_LINK_SECRET must be at least 32 characters.');
+  return hmac(new TextEncoder().encode(masterSecret), `aero-drone-key:${droneId}:${version}`);
+}
+export async function signLine(keyHex: string, body: string) { return `${body} ~${(await hmac(unhex(keyHex), body)).slice(0, 16)}`; }
+/** Returns the unsigned body when the 64-bit truncated HMAC matches, otherwise null. */
+export async function verifyLine(keyHex: string, line: string) {
+  const m = /^(.{1,200}) ~([0-9a-f]{16})$/.exec(line.trim());
+  if (!m) return null;
+  return sameText((await hmac(unhex(keyHex), m[1])).slice(0, 16), m[2]) ? m[1] : null;
+}
+export function lineDroneId(line: string) { const [tag, id] = line.trim().split(' '); return /^A[TKC]1$/.test(tag) && DRONE_ID.test(id || '') ? id : null; }
+
+const coord = (n: number) => n.toFixed(6), meters = (n: number) => n.toFixed(1);
+export function formatCommand(c: Command) {
+  if (!DRONE_ID.test(c.droneId) || !Number.isSafeInteger(c.seq) || c.seq < 1) throw new Error('Invalid command identity.');
+  if (c.args.length !== ARG_COUNT[c.type] || c.args.some(n => !Number.isFinite(n))) throw new Error(`${c.type} needs ${ARG_COUNT[c.type]} numeric arguments.`);
+  if (c.args.some((n, i) => n < ARG_RANGES[c.type]![i][0] || n > ARG_RANGES[c.type]![i][1])) throw new Error(`${c.type} argument out of range.`);
+  const args = c.type === 'GOTO' ? [coord(c.args[0]), coord(c.args[1]), meters(c.args[2])] : c.args.map(meters);
+  return ['AC1', c.droneId, c.seq, Math.floor(c.expires), c.type, ...args].join(' ');
+}
+export function formatTelemetry(t: Telemetry) {
+  return ['AT1', t.droneId, t.seq, Math.floor(t.ts), coord(t.lat), coord(t.lon), meters(t.alt), Math.round(t.battery), ((Math.round(t.heading) % 360) + 360) % 360, meters(t.speed), t.fix, t.sats, t.state, t.mode].join(' ');
+}
+export function formatAck(a: Ack) { return ['AK1', a.droneId, a.seq, Math.floor(a.ts), a.cmdSeq, a.status, ...(a.reason ? [a.reason] : [])].join(' '); }
+
+function num(token: string | undefined, pattern: RegExp, min: number, max: number) {
+  if (token === undefined || !pattern.test(token)) return null;
+  const n = Number(token); return n >= min && n <= max ? n : null;
+}
+/** Strict parser for drone → server bodies (signature already removed). Unknown or out-of-range values return null. */
+export function parseDroneBody(body: string): DroneMessage | null {
+  const t = body.split(' ');
+  if (!DRONE_ID.test(t[1] || '')) return null;
+  const seq = num(t[2], INTEGER, 1, Number.MAX_SAFE_INTEGER), ts = num(t[3], INTEGER, 1, 4102444800);
+  if (seq === null || ts === null) return null;
+  if (t[0] === 'AT1' && t.length === 14) {
+    const lat = num(t[4], DECIMAL, -90, 90), lon = num(t[5], DECIMAL, -180, 180), alt = num(t[6], DECIMAL, -100, 999.9);
+    const battery = num(t[7], /^-?\d{1,3}$/, -1, 100), heading = num(t[8], /^\d{1,3}$/, 0, 359), speed = num(t[9], DECIMAL, 0, 100);
+    const fix = num(t[10], /^\d$/, 0, 8), sats = num(t[11], /^\d{1,2}$/, 0, 99), state = t[12] as DroneState;
+    if ([lat, lon, alt, battery, heading, speed, fix, sats].some(v => v === null) || !DRONE_STATES.includes(state) || !MODE.test(t[13])) return null;
+    return { kind: 'telemetry', droneId: t[1], seq, ts, lat: lat!, lon: lon!, alt: alt!, battery: battery!, heading: heading!, speed: speed!, fix: fix!, sats: sats!, state, mode: t[13] };
+  }
+  if (t[0] === 'AK1' && (t.length === 6 || t.length === 7)) {
+    const cmdSeq = num(t[4], INTEGER, 1, Number.MAX_SAFE_INTEGER), status = t[5] as AckStatus;
+    if (cmdSeq === null || !ACK_STATUSES.includes(status) || (t[6] !== undefined && !REASON.test(t[6]))) return null;
+    return { kind: 'ack', droneId: t[1], seq, ts, cmdSeq, status, ...(t[6] ? { reason: t[6] } : {}) };
+  }
   return null;
 }
-
-/** Commands the drone should run next: safety first, then the newest flight. */
-export function nextCommand<T extends { type: string; status: string; createdAt: number; expiresAt: number }>(commands: T[], now: number): T | null {
-  const ready = commands.filter(c => c.status === 'queued' && c.expiresAt > now);
-  ready.sort((a, b) => Number(isSafety(b.type)) - Number(isSafety(a.type)) || b.createdAt - a.createdAt);
-  return ready[0] || null;
-}
-
-export function appendTrail(trail: Point[], p: Point): Point[] {
-  const last = trail[trail.length - 1];
-  if (last && distance(last, p) < 2) return trail;
-  return [...trail, p].slice(-TRAIL_POINTS);
-}
-
-// --- Device credentials -----------------------------------------------------------
-const hex = (bytes: ArrayBuffer | Uint8Array) => [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
-export const randomHex = (n: number) => hex(crypto.getRandomValues(new Uint8Array(n)));
-export async function sha256Hex(text: string) { return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))); }
-/** Token the agent stores: `aero_<droneId>.<secret>`. The server only keeps sha256(secret). */
-export const formatToken = (droneId: string, secret: string) => `aero_${droneId}.${secret}`;
-export function parseToken(header: string | null): { droneId: string; secret: string } | null {
-  const m = header?.match(/^Bearer aero_([a-f0-9-]{36})\.([a-f0-9]{64})$/);
-  return m ? { droneId: m[1], secret: m[2] } : null;
-}
-export function sameHex(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let diff = 0; for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-// --- SMS backup --------------------------------------------------------------------
-/** SMS commands work without mobile data. Codes are HMAC-signed with sha256(secret), valid for ~5 minutes, and single-use on the drone. */
-export const SMS_COMMANDS = ['HOLD', 'LAND', 'RTL', 'STATUS', 'GOTO'] as const;
-export type SmsCommand = typeof SMS_COMMANDS[number];
-export const smsCommandSchema = z.discriminatedUnion('command', [
-  z.object({ command: z.enum(['HOLD', 'LAND', 'RTL', 'STATUS']) }),
-  z.object({ command: z.literal('GOTO'), point: pointSchema, altM: z.number().int().min(5).max(LEGAL_MAX_ALT_M) }),
-]);
-export function smsBody(command: SmsCommand, args: string[] = []) { return [command, ...args].join(' '); }
-export async function smsCode(tokenHash: string, droneId: string, body: string, window: number) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(tokenHash), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = hex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${droneId}|${body}|${window}`)));
-  return String(parseInt(mac.slice(0, 8), 16) % 100_000_000).padStart(8, '0');
-}
-export async function smsText(tokenHash: string, droneId: string, command: SmsCommand, args: string[], now: number) {
-  const body = smsBody(command, args);
-  return `AERO ${body} ${await smsCode(tokenHash, droneId, body, Math.floor(now / 1000 / SMS_WINDOW_S))}`;
+/** Parses a server → drone command body. Used by tests and as the reference for bridge implementations. */
+export function parseCommandBody(body: string): Command | null {
+  const t = body.split(' '), type = t[4] as CommandType;
+  if (t[0] !== 'AC1' || !DRONE_ID.test(t[1] || '') || !COMMAND_TYPES.includes(type) || t.length !== 5 + ARG_COUNT[type]) return null;
+  const seq = num(t[2], INTEGER, 1, Number.MAX_SAFE_INTEGER), expires = num(t[3], INTEGER, 1, 4102444800);
+  const args = t.slice(5).map((a, i) => num(a, DECIMAL, ...ARG_RANGES[type]![i]));
+  if (seq === null || expires === null || args.some(a => a === null)) return null;
+  return { droneId: t[1], seq, expires, type, args: args as number[] };
 }

@@ -1,0 +1,1 @@
+CREATE INDEX `integration_kind_created` ON `integration_events` (`kind`,`created_at`);

@@ -1,5 +1,5 @@
 """AERO custom Apify Actor: live public product specifications, no fabricated fields."""
-import json, os, re, urllib.request, urllib.parse
+import json, math, os, re, urllib.request, urllib.parse
 from html.parser import HTMLParser
 ALLOWED = ('amazon.com','nike.com','zara.com','walmart.com','target.com','bestbuy.com','rei.com')
 def validate(url):
@@ -32,7 +32,7 @@ def products(value):
     if isinstance(value,list):
         for item in value: yield from products(item)
     elif isinstance(value,dict):
-        types=value.get('@type',[]); types=[types] if isinstance(types,str) else types
+        types=value.get('@type') or []; types=[types] if isinstance(types,str) else types if isinstance(types,list) else []
         if 'Product' in types: yield value
         for key in ('@graph','mainEntity','itemListElement','item'):
             if key in value: yield from products(value[key])
@@ -44,10 +44,15 @@ def measurement(value,kind):
         if not m:return None
         amount,unit=m.groups();unit=unit.lower()
     else:return None
+    if isinstance(amount,bool):return None
     try: amount=float(amount)
     except (TypeError,ValueError):return None
     factors={'kg':1,'kgm':1,'kilograms':1,'g':.001,'grm':.001,'grams':.001,'lb':.45359237,'lbs':.45359237,'lbr':.45359237,'oz':.0283495} if kind=='weight' else {'cm':1,'cmt':1,'centimeters':1,'mm':.1,'mmt':.1,'in':2.54,'inch':2.54,'inches':2.54,'inh':2.54,'m':100,'mtr':100}
-    return round(amount*factors[unit],4) if unit in factors and amount>0 else None
+    if unit not in factors or not math.isfinite(amount):return None
+    result=round(amount*factors[unit],4)
+    # Round first: a value too small to show at 4 decimals is not a published measurement.
+    # Check after scaling: a finite input can still overflow to inf once multiplied by the unit factor.
+    return result if math.isfinite(result) and result>0 else None
 
 def extract(url,html):
     p=ProductParser();p.feed(html);found=next((x for block in p.jsonld for x in products(block)),{})
@@ -58,7 +63,7 @@ def extract(url,html):
     notes.append('Product measurements may exclude packaging. Confirm the actual packed parcel before booking.')
     return {'title':str(found.get('name') or p.title or 'Product page')[:500],'url':url,'weightKg':weight,'dimensionsCm':dims if all(dims) else None,'notes':notes}
 def platform(path,method='GET',data=None):
-    token=os.environ['APIFY_TOKEN'];req=urllib.request.Request('https://api.apify.com/v2/'+path,data=json.dumps(data).encode() if data is not None else None,method=method,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+    token=os.environ['APIFY_TOKEN'];req=urllib.request.Request('https://api.apify.com/v2/'+path,data=json.dumps(data,allow_nan=False).encode() if data is not None else None,method=method,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
     with urllib.request.urlopen(req,timeout=30) as response:return json.load(response)
 def main():
     store=os.environ['APIFY_DEFAULT_KEY_VALUE_STORE_ID'];dataset=os.environ['APIFY_DEFAULT_DATASET_ID'];data=platform('key-value-stores/'+store+'/records/INPUT')

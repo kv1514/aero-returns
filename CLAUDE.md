@@ -1,14 +1,11 @@
 # AERO continuation guide
 
-Read `AGENTS.md`, `README.md`, and `docs/HANDOFF.md` before editing. This repository is the AERO drone-return app, independent of the sports arbitrage project that originally contained the checkout.
+Read `AGENTS.md`, `README.md`, and `docs/HANDOFF.md` before editing. This repository is the AERO drone-return simulation, independent of the sports arbitrage project that originally contained the checkout.
 
 Keep the interactive demo working without provider credentials. Distinguish simulation, configured integrations, and successfully verified live integrations in both code and UI.
 
-## Live drone work (`/fly`)
+Use plain `<a href>` for internal links, never `next/link`: with vinext 1.0.0-beta.5 a `<Link>` click throws and the page does not navigate (found by TigerC12, reproduced on the deployed Worker Oct 24; `tests/plain-links.test.ts` guards it).
 
-Start with [`docs/DRONE_ARCHITECTURE.md`](docs/DRONE_ARCHITECTURE.md). It covers how the website, the 4G link and the drone fit together, why the drone polls instead of being pushed to, the delivery status flow, recommended hardware, the bring-up plan and the roadmap. Protocol details are in `docs/DRONE_API.md`, and the latest status and verification are in the "Live drone control" and "Delivery jobs" sections of `docs/HANDOFF.md`.
+For real-drone work read `docs/DRONE_LINK.md` (protocol, mission, safety), then `docs/DRONE_ARCHITECTURE.md` (why the drone polls over 4G, recommended hardware, bring-up order and roadmap).
 
-- Never let the simulated return tracking drive real hardware. Real commands come only from `/fly` (`lib/drone-server.ts`) and are executed by `drone-agent/aero_agent.py`.
-- Preserve both safety layers (server `preflight`, agent checks and failsafes) and the human "package loaded" confirmation in `lib/drone-jobs.ts`.
-- Test without hardware using `scripts/fake-drone.ts` or `aero_agent.py --sim`. Run `scripts/drone-smoke.ts` and `python3 drone-agent/test_agent.py`.
-- Use plain `<a href>` for internal links. vinext's `next/link` client navigation throws in this app.
+On Windows with a deep checkout path, local D1 cannot open its SQLite files: set `AERO_LOCAL_STATE` to a short folder (`vite.config.ts`) and pass the same folder to `wrangler d1 execute --persist-to`.

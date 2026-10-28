@@ -23,7 +23,7 @@ test('facility selection excludes incompatible and nonparticipating sites',()=>{
 });
 test('unsupported packages cannot create a booking',()=>{assert.throws(()=>createReturn({...DEMO_PACKAGE,weight:20},'x',t0),/No compatible/);});
 test('full booking-to-handoff journey requires an explicit load confirmation',()=>{
-  let r=seed(),t=timing(r);
+  let r=seed();const t=timing(r);
   assert.equal(snapshot(r,t0).state,'ASSIGNED');assert.equal(snapshot(r,t0+4000).state,'PRE_FLIGHT');
   assert.equal(snapshot(r,t0+15000).state,'EN_ROUTE_TO_PICKUP');
   assert.throws(()=>control(r,'load',t0+15000),/Wait until/);
@@ -40,7 +40,7 @@ test('full booking-to-handoff journey requires an explicit load confirmation',()
   assert.ok(r.events.every((e,i)=>!i||e.at>=r.events[i-1].at));
 });
 test('pause, acceleration, resume and serialization preserve position without jumps',()=>{
-  let r=seed(),at=t0+30000, before=snapshot(r,at);
+  let r=seed();const at=t0+30000,before=snapshot(r,at);
   r=control(r,'pause',at);assert.deepEqual(snapshot(r,at+60000).point,before.point);
   r=control(r,'speed',at+60000,10);assert.deepEqual(snapshot(r,at+60000).point,before.point);
   r=control(r,'resume',at+60000);assert.equal(snapshot(r,at+61000).elapsed,before.elapsed+10);
@@ -77,4 +77,11 @@ test('uncertain AI output and any inconsistency flag always require a person',()
 test('product lookups reject local, private, credentialed and unapproved URLs',()=>{
   assert.equal(validProductURL('https://www.amazon.com/dp/EXAMPLE'),'https://www.amazon.com/dp/EXAMPLE');
   for(const value of ['http://amazon.com/a','https://127.0.0.1/a','https://amazon.com.evil.test','https://u:p@nike.com','https://nike.com:9000'])assert.throws(()=>validProductURL(value));
+});
+test('returns saved before the AirCart rename show the drone’s current name', async () => {
+  const { createReturn, settle, DEMO_PACKAGE, SIM_FLEET } = await import('../lib/simulation');
+  const r = createReturn({ ...DEMO_PACKAGE }, 'rename-1', Date.UTC(2026, 9, 24, 17), SIM_FLEET[0]);
+  const old = { ...r, drone: { ...r.drone!, name: 'AERO–104' } };
+  assert.equal(settle(old, Date.UTC(2026, 9, 24, 17, 1)).drone?.name, SIM_FLEET[0].name);
+  assert.match(SIM_FLEET[0].name, /^AirCart–\d{3}$/);
 });

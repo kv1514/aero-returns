@@ -19,15 +19,22 @@
     {
       "idx": 2,
       "version": "6",
-      "when": 1792840672844,
-      "tag": "0002_live_drones",
+      "when": 1792847881959,
+      "tag": "0002_drone_link",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
-      "when": 1792845823906,
-      "tag": "0003_delivery_jobs",
+      "when": 1792852026498,
+      "tag": "0003_sms_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792853728502,
+      "tag": "0004_integration_kind_index",
       "breakpoints": true
     }
   ]

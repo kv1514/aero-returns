@@ -1,0 +1,17 @@
+{
+  "name": "aero-spacetime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AERO's SpacetimeDB module: the real-time mirror of D1 for the shared fleet and live status.",
+  "type": "module",
+  "scripts": {
+    "build": "spacetime build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "spacetimedb": "2.13.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,27 @@
+# Template — drone/install.sh fills @USER@ and @REPO@ and installs it as
+# /etc/systemd/system/aero-bridge.service.
+[Unit]
+Description=AERO bridge: the AirCart drone's link to the AERO app (4G) and to ArduCopter via MAVROS
+Documentation=file://@REPO@/drone/README.md
+# MAVROS (aircart-ros2) owns the FC port and serves tcp:127.0.0.1:5770; start after it
+# but do not require it: without it the launcher falls back to the USB device.
+After=network-online.target aircart-ros2.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+SupplementaryGroups=dialout
+WorkingDirectory=@REPO@
+EnvironmentFile=/etc/aero/bridge.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 @REPO@/drone/run_bridge.py
+# Ctrl-C semantics: the bridge stops without landing; the FC's own failsafes take over.
+KillSignal=SIGINT
+TimeoutStopSec=15
+# Not configured yet / FC unplugged / MAVROS restarting: keep retrying quietly.
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

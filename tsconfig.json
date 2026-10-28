@@ -49,6 +49,7 @@
     ".sites-runtime",
     "outputs",
     "work",
-    "supabase/functions"
+    "supabase/functions",
+    "spacetime"
   ]
 }

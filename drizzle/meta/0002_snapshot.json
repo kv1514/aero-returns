@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bac50a6d-0199-41e6-9936-147b6b751c69",
+  "id": "4ba9281f-4f6d-4715-99f7-591135d7f58e",
   "prevId": "3c0f3c4c-f07d-4acd-a538-bc91bbe8fefd",
   "tables": {
     "amazon_accounts": {
@@ -112,9 +112,9 @@
           "notNull": true,
           "autoincrement": false
         },
-        "issued_by": {
-          "name": "issued_by",
-          "type": "text",
+        "seq": {
+          "name": "seq",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -126,8 +126,22 @@
           "notNull": true,
           "autoincrement": false
         },
-        "params": {
-          "name": "params",
+        "line": {
+          "name": "line",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "return_id": {
+          "name": "return_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "phase": {
+          "name": "phase",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -140,22 +154,15 @@
           "notNull": true,
           "autoincrement": false
         },
-        "channel": {
-          "name": "channel",
+        "reason": {
+          "name": "reason",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -168,26 +175,89 @@
           "notNull": true,
           "autoincrement": false
         },
-        "message": {
-          "name": "message",
-          "type": "text",
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         }
       },
       "indexes": {
-        "drone_commands_drone_created": {
-          "name": "drone_commands_drone_created",
+        "drone_commands_seq": {
+          "name": "drone_commands_seq",
           "columns": [
             "drone_id",
-            "created_at"
+            "seq"
+          ],
+          "isUnique": true
+        },
+        "drone_commands_status": {
+          "name": "drone_commands_status",
+          "columns": [
+            "drone_id",
+            "status"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "drone_telemetry": {
+      "name": "drone_telemetry",
+      "columns": {
+        "drone_id": {
+          "name": "drone_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "data": {
+          "name": "data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "drone_telemetry_received": {
+          "name": "drone_telemetry_received",
+          "columns": [
+            "drone_id",
+            "received_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "drone_telemetry_drone_id_seq_pk": {
+          "columns": [
+            "drone_id",
+            "seq"
+          ],
+          "name": "drone_telemetry_drone_id_seq_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -215,26 +285,11 @@
           "notNull": true,
           "autoincrement": false
         },
-        "token_hash": {
-          "name": "token_hash",
+        "transport": {
+          "name": "transport",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "pilots": {
-          "name": "pilots",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
-        "pilot_code": {
-          "name": "pilot_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "phone": {
@@ -244,49 +299,59 @@
           "notNull": false,
           "autoincrement": false
         },
-        "home_lng": {
-          "name": "home_lng",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "home_lat": {
-          "name": "home_lat",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "geofence_m": {
-          "name": "geofence_m",
+        "key_version": {
+          "name": "key_version",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 500
+          "default": 1
         },
-        "max_alt_m": {
-          "name": "max_alt_m",
+        "config": {
+          "name": "config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "armed_until": {
+          "name": "armed_until",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 40
+          "default": 0
         },
-        "created_at": {
-          "name": "created_at",
+        "active_return": {
+          "name": "active_return",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_seq": {
+          "name": "last_seq",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": 0
+        },
+        "cmd_seq": {
+          "name": "cmd_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "last_seen": {
           "name": "last_seen",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "telemetry": {
           "name": "telemetry",
@@ -295,13 +360,12 @@
           "notNull": false,
           "autoincrement": false
         },
-        "trail": {
-          "name": "trail",
-          "type": "text",
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -312,10 +376,10 @@
           ],
           "isUnique": false
         },
-        "drones_pilot_code": {
-          "name": "drones_pilot_code",
+        "drones_phone": {
+          "name": "drones_phone",
           "columns": [
-            "pilot_code"
+            "phone"
           ],
           "isUnique": false
         }

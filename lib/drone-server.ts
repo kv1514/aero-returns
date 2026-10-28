@@ -1,293 +1,375 @@
-/** Live drone API. Website users (owner + invited pilots) queue commands; the drone's agent
- * polls /api/drone/sync over 4G, reports telemetry and receives the next command. */
+/** Drone link storage and transports (docs/DRONE_LINK.md). Mission rules are pure functions in drone-mission.ts. */
 import { env } from 'cloudflare:workers';
 import { z } from 'zod';
-import { session } from './server';
-import type { Point } from './simulation';
-import {
-  appendTrail, commandRequestSchema, droneSettingsSchema, FLY_EXPIRES_MS, formatToken, isOnline, isSafety, nextCommand, parseToken,
-  preflight, randomHex, SAFETY_EXPIRES_MS, sameHex, sha256Hex, smsCommandSchema, smsText, syncSchema,
-  type CommandStatus, type CommandType, type DroneCommand, type DroneConfig, type DroneEvent, type DroneView, type FlyRoute, type Telemetry, MIN_BATTERY_PCT,
-} from './drone-protocol';
-import { createJob, isActiveJob, JOB_TITLES, jobRequestSchema, legCommand, onAck, onCancel, onLoaded, onResume, remainingWaypoints, type DeliveryJob, type JobLeg } from './drone-jobs';
+import { session } from './session';
+import { sessionFailure } from './http';
+import { publishDrone, publishReport, removeDrone } from './spacetime-server';
+import { deriveDroneKey, formatCommand, lineDroneId, parseDroneBody, signLine, verifyLine, type Ack, type CommandType, type DroneMessage } from './drone-protocol';
+import { ARM_WINDOW_MS, ENDED, EXPIRY_S, GROUND_PHASES, LIMITS, STALE_MS, ackOutcome, airborne, configProblem, customerAction, dispatchBlockers, droneGoneError, enterPhase, fleetInputError, isStale, groundChange, operatorAction, phaseCommand, pickupFor, pickupMismatch, settledFinal, startLive, type Drone, type DroneConfig, type PlannedCommand } from './drone-mission';
+import type { LiveFlight, LiveTelemetry, MissionPhase, Point, ReturnRecord } from './simulation';
 
-type Row = { id: string; owner: string; name: string; token_hash: string; pilots: string; pilot_code: string | null; phone: string | null; home_lng: number | null; home_lat: number | null; geofence_m: number; max_alt_m: number; created_at: number; last_seen: number | null; telemetry: string | null; trail: string };
-type CommandRow = { id: string; drone_id: string; issued_by: string; type: string; params: string | null; status: string; channel: string; created_at: number; updated_at: number; expires_at: number; message: string | null; job_id: string | null; leg: string | null };
-type JobRow = { id: string; drone_id: string; record: string };
-type EventRow = { id: string; drone_id: string; job_id: string | null; kind: DroneEvent['kind']; title: string; detail: string | null; at: number };
-const JOB_WINDOW_MS = 3_600_000;
+type DroneRow = { id: string; owner: string; name: string; transport: string; phone: string | null; phone_verified: number; key_version: number; config: string; armed_until: number; active_return: string | null; last_seq: number; cmd_seq: number; last_seen: number; telemetry: string | null; created_at: number };
+const toDrone = (r: DroneRow): Drone => ({ id: r.id, owner: r.owner, name: r.name, transport: r.transport === 'sms' ? 'sms' : 'https', phone: r.phone, phoneVerified: !!r.phone_verified, keyVersion: r.key_version, config: JSON.parse(r.config), armedUntil: r.armed_until, activeReturn: r.active_return, lastSeq: r.last_seq, lastSeen: r.last_seen, telemetry: r.telemetry ? JSON.parse(r.telemetry) : null, createdAt: r.created_at });
+const secret = () => (env.DRONE_LINK_SECRET && env.DRONE_LINK_SECRET.length >= 32 ? env.DRONE_LINK_SECRET : null);
+const twilio = () => (env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER ? { sid: env.TWILIO_ACCOUNT_SID, token: env.TWILIO_AUTH_TOKEN, from: env.TWILIO_FROM_NUMBER } : null);
+const keyFor = (d: Drone) => deriveDroneKey(secret()!, d.id, d.keyVersion);
+const loadDrone = async (db: D1Database, id: string) => { const row = await db.prepare('SELECT * FROM drones WHERE id = ?').bind(id).first<DroneRow>(); return row ? toDrone(row) : null; };
+/** Telemetry and stale flags are attached on read and never persisted inside a return record. */
+const persistable = (r: ReturnRecord): ReturnRecord => (r.live ? { ...r, live: { ...r.live, telemetry: undefined, stale: undefined } } : r);
+const MOVEMENT: CommandType[] = ['TAKEOFF', 'GOTO', 'HOLD', 'LAND', 'RTL', 'ABORT'];
+const RANK: Record<string, number> = { pending: 0, sent: 0, superseded: 0, expired: 0, accepted: 1, done: 2, rejected: 2, failed: 2 };
+const SMS = { perMinute: 10, maxSends: 3 }, COMMANDS_PER_MINUTE = 30, GROUND_WRITE_MS = 5000;
 
-class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
-const noStore = { 'Cache-Control': 'private, no-store' };
-const home = (r: Row): Point | null => r.home_lng === null || r.home_lat === null ? null : [r.home_lng, r.home_lat];
-const pilotsOf = (r: Row): string[] => { try { return JSON.parse(r.pilots); } catch { return []; } };
-const telemetryOf = (r: Row): Telemetry | null => r.telemetry ? JSON.parse(r.telemetry) : null;
-const command = (c: CommandRow): DroneCommand => ({ id: c.id, type: c.type as CommandType, params: c.params ? JSON.parse(c.params) as FlyRoute : null, status: c.status as CommandStatus, channel: c.channel as 'internet' | 'sms', createdAt: c.created_at, updatedAt: c.updated_at, expiresAt: c.expires_at, message: c.message });
-const pilotCode = () => [...crypto.getRandomValues(new Uint8Array(6))].map(b => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
-
-function db() { if (!env.DB) throw new HttpError(503, 'Drone storage is unavailable. Try again shortly.'); return env.DB; }
-// Bodies are always read up front: replying before consuming one breaks the next request on a kept-alive connection.
-function parse<S extends z.ZodTypeAny>(raw: string, schema: S, limit = 8000): z.output<S> {
-  if (raw.length > limit) throw new HttpError(413, 'Request is too large.');
-  return schema.parse(raw ? JSON.parse(raw) : {});
+async function allocSeq(db: D1Database, droneId: string) {
+  const row = await db.prepare('UPDATE drones SET cmd_seq = cmd_seq + 1 WHERE id = ? RETURNING cmd_seq').bind(droneId).first<{ cmd_seq: number }>();
+  if (!row) throw new Error('Drone not found.');
+  return row.cmd_seq;
 }
-async function load(id: string) { return db().prepare('SELECT * FROM drones WHERE id = ?').bind(id).first<Row>(); }
-async function access(id: string, owner: string) {
-  const row = await load(id);
-  if (!row || (row.owner !== owner && !pilotsOf(row).includes(owner))) throw new HttpError(404, 'This drone is not linked to your account.');
-  return row;
+/**
+ * Statements that queue one signed command. With `guard`, they only take effect if the return is still at that
+ * version, so a mission step and its command commit together. A command never supersedes a newer one (seq < new).
+ */
+async function commandStatements(db: D1Database, drone: Drone, seq: number, cmd: PlannedCommand, link: { returnId: string; phase: MissionPhase } | null, now: number, guard?: { returnId: string; version: number }) {
+  const expires = Math.floor(now / 1000) + EXPIRY_S[drone.transport];
+  const line = await signLine(await keyFor(drone), formatCommand({ droneId: drone.id, seq, expires, ...cmd }));
+  const cond = guard ? ' AND EXISTS (SELECT 1 FROM returns WHERE id = ? AND version = ?)' : '', g = guard ? [guard.returnId, guard.version] : [];
+  const statements: D1PreparedStatement[] = [];
+  // Only the newest movement command is live; PING can ride alongside it.
+  if (MOVEMENT.includes(cmd.type)) statements.push(db.prepare(`UPDATE drone_commands SET status = 'superseded', updated_at = ? WHERE drone_id = ? AND status IN ('pending', 'sent') AND type != 'PING' AND seq < ?${cond}`).bind(now, drone.id, seq, ...g));
+  statements.push(db.prepare(`INSERT INTO drone_commands (id, drone_id, seq, type, line, return_id, phase, status, created_at, expires_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ? WHERE 1${cond}`).bind(crypto.randomUUID(), drone.id, seq, cmd.type, line, link?.returnId ?? null, link?.phase ?? null, now, expires, now, ...g));
+  return statements;
 }
-const latestJob = (droneId: string, now: number) => db().prepare('SELECT * FROM drone_jobs WHERE drone_id = ? AND (status NOT IN (\'completed\', \'cancelled\', \'failed\') OR updated_at > ?) ORDER BY created_at DESC LIMIT 1').bind(droneId, now - JOB_WINDOW_MS).first<JobRow>();
-const loadJob = (droneId: string, jobId: string) => db().prepare('SELECT * FROM drone_jobs WHERE id = ? AND drone_id = ?').bind(jobId, droneId).first<JobRow>();
-const saveJob = (j: DeliveryJob) => db().prepare('UPDATE drone_jobs SET status = ?, record = ?, updated_at = ? WHERE id = ?').bind(j.status, JSON.stringify(j), j.updatedAt, j.id);
-const logEvent = (droneId: string, jobId: string | null, kind: DroneEvent['kind'], title: string, detail: string | null, at: number) =>
-  db().prepare('INSERT INTO drone_events (id, drone_id, job_id, kind, title, detail, at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), droneId, jobId, kind, title, detail, at);
-/** Status events for every job transition since `before`. */
-const jobEvents = (before: DeliveryJob, after: DeliveryJob) => after.events.slice(before.events.length).map(e => logEvent(after.droneId, after.id, 'job', JOB_TITLES[e.status], e.note ?? null, e.at));
-
-async function view(row: Row, owner: string, now: number): Promise<DroneView> {
-  const [commands, events, job] = await Promise.all([
-    db().prepare('SELECT * FROM drone_commands WHERE drone_id = ? ORDER BY created_at DESC LIMIT 12').bind(row.id).all<CommandRow>(),
-    db().prepare('SELECT * FROM drone_events WHERE drone_id = ? ORDER BY at DESC LIMIT 25').bind(row.id).all<EventRow>(),
-    latestJob(row.id, now),
-  ]);
-  const mine = row.owner === owner;
-  return {
-    id: row.id, name: row.name, role: mine ? 'owner' : 'pilot', online: isOnline(row.last_seen, now), lastSeen: row.last_seen, telemetry: telemetryOf(row),
-    trail: JSON.parse(row.trail), home: home(row), geofenceM: row.geofence_m, maxAltM: row.max_alt_m, phone: row.phone,
-    pilotCode: mine ? row.pilot_code : null, pilots: pilotsOf(row).length,
-    commands: commands.results.map(c => ({ ...command(c), expiresAt: c.status === 'queued' && c.expires_at <= now ? now : c.expires_at, status: c.status === 'queued' && c.expires_at <= now ? 'expired' : c.status as CommandStatus })),
-    job: job ? JSON.parse(job.record) as DeliveryJob : null,
-    events: events.results.map(e => ({ id: e.id, jobId: e.job_id, kind: e.kind, title: e.title, detail: e.detail, at: e.at })),
-  };
+async function enqueue(db: D1Database, drone: Drone, cmd: PlannedCommand, now: number) {
+  const seq = await allocSeq(db, drone.id);
+  await db.batch(await commandStatements(db, drone, seq, cmd, null, now));
+  if (drone.transport === 'sms') await flushSms(db, drone, now, false);
+  return seq;
 }
-function queueStatements(row: Row, issuedBy: string, type: CommandType, params: FlyRoute | null, channel: 'internet' | 'sms', now: number, job?: { id: string; leg: JobLeg }) {
-  // A new flight replaces any flight still waiting. Any safety command replaces everything still waiting.
-  const superseded = isSafety(type) ? "status = 'queued'" : "status = 'queued' AND type = 'FLY_ROUTE'";
-  const id = crypto.randomUUID();
-  return { id, statements: [
-    db().prepare(`UPDATE drone_commands SET status = 'superseded', updated_at = ? WHERE drone_id = ? AND ${superseded}`).bind(now, row.id),
-    db().prepare('INSERT INTO drone_commands (id, drone_id, issued_by, type, params, status, channel, created_at, updated_at, expires_at, message, job_id, leg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, row.id, issuedBy, type, params ? JSON.stringify(params) : null, channel === 'sms' ? 'sent' : 'queued', channel, now, now, now + (type === 'FLY_ROUTE' ? FLY_EXPIRES_MS : SAFETY_EXPIRES_MS), channel === 'sms' ? 'Sent as a text message' : null, job?.id ?? null, job?.leg ?? null),
-  ] };
-}
-async function queue(row: Row, issuedBy: string, type: CommandType, params: FlyRoute | null, channel: 'internet' | 'sms', now: number) {
-  const { id, statements } = queueStatements(row, issuedBy, type, params, channel, now);
-  await db().batch([...statements, ...(isSafety(type) ? [logEvent(row.id, null, 'command', `${type === 'RTL' ? 'Return home' : type === 'HOLD' ? 'Hold' : 'Land'} sent${channel === 'sms' ? ' by text' : ''}`, null, now)] : [])]);
-  return id;
-}
-const droneLimits = (row: Row) => ({ home: home(row), geofenceM: row.geofence_m, maxAltM: row.max_alt_m, lastSeen: row.last_seen, telemetry: telemetryOf(row) });
-/** Preflight for the rest of a job: every remaining stop must be reachable from where the drone is now. */
-function jobPreflight(row: Row, j: Pick<DeliveryJob, 'pickup' | 'dropoff' | 'loaded' | 'altM' | 'speedMs'>, now: number) {
-  return preflight(droneLimits(row), { waypoints: remainingWaypoints(j), altM: j.altM, speedMs: j.speedMs, land: true, release: false }, now);
+async function recentCommands(db: D1Database, droneId: string, now: number) {
+  return (await db.prepare('SELECT COUNT(*) AS n FROM drone_commands WHERE drone_id = ? AND created_at > ?').bind(droneId, now - 60_000).first<{ n: number }>())?.n ?? 0;
 }
 
-async function handleJobs(row: Row, owner: string, raw: string, now: number) {
-  const req = parse(raw, jobRequestSchema);
-  if (req.op === 'create') {
-    const active = await latestJob(row.id, now);
-    if (active && isActiveJob(JSON.parse(active.record))) throw new HttpError(409, 'This drone is already on a delivery. Finish or cancel it first.');
-    const refused = jobPreflight(row, { ...req, loaded: false }, now);
-    if (refused) throw new HttpError(409, refused);
-    const job = createJob(req, crypto.randomUUID(), row.id, now), leg = legCommand(job, 'pickup');
-    const { statements } = queueStatements(row, owner, leg.type, leg.params, 'internet', now, { id: job.id, leg: 'pickup' });
-    await db().batch([
-      db().prepare('INSERT INTO drone_jobs (id, drone_id, issued_by, return_id, status, record, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(job.id, row.id, owner, job.returnId, job.status, JSON.stringify(job), now, now),
-      ...statements, ...jobEvents({ ...job, events: [] }, job),
-    ]);
-    return job;
+type MissionMove = { fault?: string | null; command?: PlannedCommand | null; cancelled?: boolean; keepSeq?: boolean; live?: Partial<LiveFlight> };
+/**
+ * Compare-and-set a mission phase on a return together with the phase's command. Returns null when another request won.
+ * `live` patches the flight first (a divert to the pad); an ending flight keeps the drone's last report as its final telemetry.
+ */
+async function moveMission(db: D1Database, drone: Drone, r: ReturnRecord, version: number, phase: MissionPhase, move: MissionMove, now: number) {
+  const live = { ...r.live!, ...move.live, ...(ENDED.includes(phase) && drone.telemetry ? { finalTelemetry: drone.telemetry } : {}) };
+  const command = move.command !== undefined ? move.command : phaseCommand(live, phase);
+  const seq = command ? await allocSeq(db, drone.id) : move.keepSeq ? live.cmdSeq : null;
+  const next = { ...enterPhase({ ...r, live, cancelled: r.cancelled || !!move.cancelled }, phase, now, seq, move.fault ?? null), version: version + 1 };
+  const guard = { returnId: next.id, version: next.version };
+  const statements = [db.prepare('UPDATE returns SET version = ?, record = ? WHERE id = ? AND owner = ? AND version = ?').bind(next.version, JSON.stringify(persistable(next)), next.id, drone.owner, version)];
+  if (command) statements.push(...await commandStatements(db, drone, seq!, command, { returnId: next.id, phase }, now, guard));
+  if (ENDED.includes(phase)) statements.push(db.prepare('UPDATE drones SET active_return = NULL WHERE id = ? AND active_return = ? AND EXISTS (SELECT 1 FROM returns WHERE id = ? AND version = ?)').bind(drone.id, next.id, guard.returnId, guard.version));
+  const [result] = await db.batch(statements);
+  if (result.meta.changes === 0) return null;
+  if (command && drone.transport === 'sms') await flushSms(db, drone, now, false);
+  return next;
+}
+async function missionReturn(db: D1Database, drone: Drone) {
+  if (!drone.activeReturn) return null;
+  const row = await db.prepare('SELECT record, version FROM returns WHERE id = ? AND owner = ?').bind(drone.activeReturn, drone.owner).first<{ record: string; version: number }>();
+  return row ? { record: JSON.parse(row.record) as ReturnRecord, version: row.version } : null;
+}
+/** Applies a mission transition, re-reading once if a concurrent request changed the return. */
+async function stepMission(db: D1Database, drone: Drone, decide: (r: ReturnRecord) => ({ phase: MissionPhase } & MissionMove) | null, now: number) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const current = await missionReturn(db, drone); if (!current?.record.live) return null;
+    const step = decide(current.record); if (!step) return current.record;
+    const moved = await moveMission(db, drone, current.record, current.version, step.phase, step, now);
+    if (moved) return moved;
   }
-  const jobRow = await loadJob(row.id, req.jobId);
-  if (!jobRow) throw new HttpError(404, 'That delivery was not found on this drone.');
-  const before: DeliveryJob = JSON.parse(jobRow.record);
-  let after: DeliveryJob;
-  try { after = req.op === 'loaded' ? onLoaded(before, now) : req.op === 'cancel' ? onCancel(before, now) : onResume(before, now); }
-  catch (error) { throw new HttpError(409, (error as Error).message); }
-  const statements = [saveJob(after), ...jobEvents(before, after)];
-  if (req.op === 'cancel') {
-    // Stop any waiting leg. If the drone is in the air, bring it home.
-    statements.push(db().prepare("UPDATE drone_commands SET status = 'superseded', updated_at = ? WHERE drone_id = ? AND job_id = ? AND status = 'queued'").bind(now, row.id, before.id));
-    const t = telemetryOf(row);
-    if (t && t.altM > 0.5 && isOnline(row.last_seen, now)) statements.push(...queueStatements(row, owner, 'RTL', null, 'internet', now).statements, logEvent(row.id, before.id, 'command', 'Return home sent', 'The delivery was cancelled in flight.', now));
-  } else {
-    const leg = after.leg!;
-    if (leg !== 'return') { const refused = jobPreflight(row, after, now); if (refused) throw new HttpError(409, refused); }
-    else if (!isOnline(row.last_seen, now)) throw new HttpError(409, 'The drone is offline. Check its 4G connection.');
-    const cmd = legCommand(after, leg);
-    statements.push(...queueStatements(row, owner, cmd.type, cmd.params, 'internet', now, { id: after.id, leg }).statements);
+  throw new Error('This live flight changed at the same time. Please try again.');
+}
+
+async function applyAck(db: D1Database, drone: Drone, ack: Ack, now: number) {
+  const cmd = await db.prepare('SELECT status, return_id FROM drone_commands WHERE drone_id = ? AND seq = ?').bind(drone.id, ack.cmdSeq).first<{ status: string; return_id: string | null }>();
+  if (!cmd || RANK[ack.status.toLowerCase()] <= RANK[cmd.status] || RANK[cmd.status] === 2) return;
+  await db.prepare('UPDATE drone_commands SET status = ?, reason = ?, updated_at = ? WHERE drone_id = ? AND seq = ?').bind(ack.status.toLowerCase(), ack.reason ?? null, now, drone.id, ack.cmdSeq).run();
+  if (cmd.return_id && cmd.return_id === drone.activeReturn) await stepMission(db, drone, r => { const o = ackOutcome(r.live!, ack); return o && (o.fault ? { ...o, command: null, keepSeq: true } : o); }, now);
+}
+/**
+ * Stores what the drone reported. Only new, fresh telemetry refreshes `last_seen`, so replayed or delayed lines can
+ * never make a silent drone look connected. HTTPS bridges are judged by their own timestamps; SMS by receive time.
+ */
+async function ingest(db: D1Database, drone: Drone, messages: DroneMessage[], now: number) {
+  let lastSeq = drone.lastSeq, telemetry: LiveTelemetry | null = null, fresh = false, acked = false; const rows: D1PreparedStatement[] = [];
+  for (const m of [...messages].sort((a, b) => a.seq - b.seq)) {
+    const age = now - m.ts * 1000;
+    if (drone.transport === 'https' && Math.abs(age) > 600_000) continue;
+    if (m.kind === 'telemetry') {
+      if (m.seq <= lastSeq) continue;
+      telemetry = { ts: m.ts * 1000, receivedAt: now, lat: m.lat, lon: m.lon, alt: m.alt, battery: m.battery, heading: m.heading, speed: m.speed, fix: m.fix, sats: m.sats, state: m.state, mode: m.mode };
+      fresh = drone.transport === 'sms' || Math.abs(age) <= STALE_MS.https;
+    } else { await applyAck(db, drone, m, now); acked = true; }
+    lastSeq = Math.max(lastSeq, m.seq);
   }
-  await db().batch(statements);
-  return after;
+  const flying = airborne(telemetry) || airborne(drone.telemetry), changed = groundChange(drone.telemetry, telemetry);
+  // An idle drone on the ground writes at most every few seconds unless something dispatch or Pad = drone reads changed; flights and missions write every report.
+  if (!telemetry || !(fresh || acked) || !(flying || drone.activeReturn || changed || acked || now - drone.lastSeen >= GROUND_WRITE_MS)) {
+    if (lastSeq > drone.lastSeq && acked) await db.prepare('UPDATE drones SET last_seq = MAX(last_seq, ?) WHERE id = ?').bind(lastSeq, drone.id).run();
+    return;
+  }
+  rows.push(db.prepare(`UPDATE drones SET last_seq = MAX(last_seq, ?), telemetry = ?${fresh ? ', last_seen = ?' : ''} WHERE id = ?`).bind(...[lastSeq, JSON.stringify(telemetry), ...(fresh ? [now] : []), drone.id]));
+  if (flying) rows.push(db.prepare('INSERT OR IGNORE INTO drone_telemetry (drone_id, seq, received_at, data) VALUES (?, ?, ?, ?)').bind(drone.id, lastSeq, now, JSON.stringify(telemetry)));
+  if (Math.random() < .01) rows.push(db.prepare('DELETE FROM drone_telemetry WHERE drone_id = ? AND received_at < ?').bind(drone.id, now - 3 * 3600_000));
+  await db.batch(rows);
+  if (fresh && airborne(drone.telemetry) && !airborne(telemetry)) await settleFinal(db, drone, telemetry);
+}
+/**
+ * On the drone's first ground report after flying, a flight of this drone that ended in the air takes that report as its
+ * final one (settledFinal). Only the flight that just ended, or the latest one while the drone has no other mission: a
+ * new dispatch needs the drone on the ground, so this landing belongs to it.
+ */
+async function settleFinal(db: D1Database, drone: Drone, t: LiveTelemetry) {
+  const row = await db.prepare("SELECT id, record, version FROM returns WHERE owner = ? AND json_extract(record, '$.live.droneId') = ? AND json_extract(record, '$.live.phase') IN ('COMPLETE', 'ABORTED') ORDER BY json_extract(record, '$.live.phaseAt') DESC LIMIT 1").bind(drone.owner, drone.id).first<{ id: string; record: string; version: number }>();
+  if (!row || (drone.activeReturn && drone.activeReturn !== row.id)) return;
+  const next = settledFinal(JSON.parse(row.record) as ReturnRecord, t);
+  if (next) await db.prepare('UPDATE returns SET version = ?, record = ? WHERE id = ? AND owner = ? AND version = ?').bind(row.version + 1, JSON.stringify(persistable({ ...next, version: row.version + 1 })), row.id, drone.owner, row.version).run();
+}
+/** Unaccepted commands past their expiry pause the mission so the operator can retry over a better link. */
+async function expireCommands(db: D1Database, drone: Drone, now: number) {
+  const expired = await db.prepare("UPDATE drone_commands SET status = 'expired', updated_at = ? WHERE drone_id = ? AND status IN ('pending', 'sent') AND expires_at <= ? RETURNING seq, return_id").bind(now, drone.id, Math.floor(now / 1000)).all<{ seq: number; return_id: string | null }>();
+  const seqs = expired.results.filter(c => c.return_id && c.return_id === drone.activeReturn).map(c => c.seq);
+  if (seqs.length) await stepMission(db, drone, r => (r.live!.cmdSeq !== null && seqs.includes(r.live!.cmdSeq) && !r.live!.fault ? { phase: r.live!.phase, fault: 'EXPIRED', command: null, keepSeq: true } : null), now);
+}
+async function pendingLines(db: D1Database, droneId: string, now: number) {
+  const rows = await db.prepare("SELECT seq, line FROM drone_commands WHERE drone_id = ? AND status IN ('pending', 'sent') AND expires_at > ? ORDER BY seq").bind(droneId, Math.floor(now / 1000)).all<{ seq: number; line: string }>();
+  if (rows.results.length) await db.prepare("UPDATE drone_commands SET status = 'sent', updated_at = ? WHERE drone_id = ? AND status = 'pending'").bind(now, droneId).run();
+  return rows.results.map(r => r.line);
+}
+/**
+ * Texts commands to an SMS drone. New commands go out once; unacknowledged ones are re-sent only when the drone texts
+ * in (`resend`), at most SMS.maxSends times. Nothing is sent to a number that has not proven itself with a signed text,
+ * and each drone is capped at SMS.perMinute outbound messages.
+ */
+async function flushSms(db: D1Database, drone: Drone, now: number, resend: boolean) {
+  const t = twilio(); if (!t || !drone.phone || !drone.phoneVerified) return;
+  const recent = await db.prepare('SELECT COALESCE(SUM(send_count), 0) AS n FROM drone_commands WHERE drone_id = ? AND send_count > 0 AND updated_at > ?').bind(drone.id, now - 60_000).first<{ n: number }>();
+  const budget = SMS.perMinute - (recent?.n ?? 0); if (budget <= 0) return;
+  const filter = resend ? `(status = 'pending' OR (status = 'sent' AND send_count < ${SMS.maxSends}))` : "status = 'pending'";
+  const rows = await db.prepare(`SELECT seq, line FROM drone_commands WHERE drone_id = ? AND expires_at > ? AND ${filter} ORDER BY seq LIMIT ?`).bind(drone.id, Math.floor(now / 1000), budget).all<{ seq: number; line: string }>();
+  for (const row of rows.results) {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${t.sid}/Messages.json`, { method: 'POST', headers: { Authorization: `Basic ${btoa(`${t.sid}:${t.token}`)}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ To: drone.phone, From: t.from, Body: row.line }) });
+    if (!res.ok) { console.error('AERO SMS send failed', res.status); break; }
+    await db.prepare("UPDATE drone_commands SET status = 'sent', send_count = send_count + 1, updated_at = ? WHERE drone_id = ? AND seq = ? AND status IN ('pending', 'sent')").bind(now, drone.id, row.seq).run();
+  }
+}
+async function verifiedMessages(drone: Drone, lines: string[]) {
+  const key = await keyFor(drone), out: DroneMessage[] = [];
+  for (const line of lines) { const body = await verifyLine(key, line); const m = body && parseDroneBody(body); if (m && m.droneId === drone.id) out.push(m); }
+  return out;
 }
 
-async function sendSms(to: string, text: string): Promise<boolean> {
-  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM) return false;
-  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(env.TWILIO_ACCOUNT_SID)}/Messages.json`, {
-    method: 'POST', signal: AbortSignal.timeout(15000),
-    headers: { Authorization: `Basic ${btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`)}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ To: to, From: env.TWILIO_FROM, Body: text }),
-  });
-  if (!response.ok) throw new HttpError(502, 'The SMS provider rejected the message. Check the Twilio number and settings.');
-  return true;
+const text = (body: string, status = 200) => new Response(body, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+const tooLarge = (request: Request, max: number) => Number(request.headers.get('content-length') || 0) > max;
+/** HTTPS transport: the bridge posts signed telemetry/acks and receives pending signed commands. */
+export async function handleLink(request: Request) {
+  const db = env.DB; if (!db || !secret()) return text('Drone link is not configured.', 503);
+  if (tooLarge(request, 4096)) return text('Too large.', 413);
+  const raw = await request.text(); if (raw.length > 4096) return text('Too large.', 413);
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean).slice(0, 20), id = lines[0] && lineDroneId(lines[0]);
+  const drone = id ? await loadDrone(db, id) : null; if (!drone || drone.transport !== 'https') return text('Unauthorized.', 401);
+  const messages = await verifiedMessages(drone, lines); if (!messages.length) return text('Unauthorized.', 401);
+  const now = Date.now();
+  await ingest(db, drone, messages, now);
+  const fresh = (await loadDrone(db, drone.id))!; await expireCommands(db, fresh, now);
+  publishReport(db, drone, fresh);
+  return text((await pendingLines(db, drone.id, now)).join('\n'));
 }
 
-/** Website endpoints: /api/drones[/:id[/:action]] */
-export async function handleDrones(request: Request, id?: string, action?: string): Promise<Response> {
-  const raw = request.method === 'GET' ? '' : await request.text();
+async function twilioSignatureValid(request: Request, params: URLSearchParams, token: string) {
+  const data = request.url + [...params.keys()].sort().map(k => k + params.get(k)).join('');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(token), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const expected = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)))));
+  return expected === request.headers.get('x-twilio-signature');
+}
+/** SMS transport: Twilio forwards texts from the drone's SIM; commands go back out through the Twilio REST API. */
+export async function handleSms(request: Request) {
+  const db = env.DB, t = twilio(), twiml = new Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', { headers: { 'Content-Type': 'text/xml' } });
+  if (!db || !secret() || !t) return text('SMS link is not configured.', 503);
+  if (tooLarge(request, 16_000)) return text('Too large.', 413);
+  const params = new URLSearchParams(await request.text());
+  if (!(await twilioSignatureValid(request, params, t.token))) return text('Invalid signature.', 403);
+  const row = await db.prepare("SELECT * FROM drones WHERE phone = ? AND transport = 'sms'").bind(params.get('From') || '').first<DroneRow>();
+  if (!row) return twiml;
+  const drone = toDrone(row), messages = await verifiedMessages(drone, (params.get('Body') || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean).slice(0, 5));
+  if (!messages.length) return twiml;
+  const now = Date.now();
+  // A correctly signed text from this number proves the operator controls it; only then may AERO text it back.
+  if (!drone.phoneVerified) await db.prepare('UPDATE drones SET phone_verified = 1 WHERE id = ?').bind(drone.id).run();
+  await ingest(db, drone, messages, now);
+  const fresh = (await loadDrone(db, drone.id))!; await expireCommands(db, fresh, now); await flushSms(db, fresh, now, true);
+  publishReport(db, drone, fresh);
+  return twiml;
+}
+
+/** Adds the mission drone's latest telemetry to live returns for the customer view. */
+export async function attachLive(db: D1Database, owner: string, records: ReturnRecord[], now: number) {
+  const ids = [...new Set(records.flatMap(r => (r.live ? [r.live.droneId] : [])))];
+  if (!ids.length) return records;
+  const rows = await db.prepare(`SELECT * FROM drones WHERE owner = ? AND id IN (${ids.map(() => '?').join(',')})`).bind(owner, ...ids).all<DroneRow>();
+  const drones = new Map(rows.results.map(r => [r.id, toDrone(r)]));
+  // Only the flight the drone is flying right now shows its telemetry; finished ones keep their final positions.
+  return records.map(r => { const d = r.live && drones.get(r.live.droneId); return d && r.live && d.activeReturn === r.id ? { ...r, live: { ...r.live, telemetry: d.telemetry, stale: isStale(d, now) } } : r; });
+}
+const liveActionSchema = z.object({ action: z.string() });
+export async function liveReturnRequest(db: D1Database, owner: string, record: ReturnRecord, version: number, request: Request, now: number): Promise<{ status: number; body: unknown }> {
+  const drone = await loadDrone(db, record.live!.droneId);
+  // The flight ended and its drone was removed: a read still shows the final record, but an action is refused, never a silent 200.
+  if (!drone || drone.owner !== owner) return request.method === 'GET' ? { status: 200, body: { record, now } } : { status: 409, body: { error: droneGoneError(record.live!) } };
+  if (request.method === 'GET') {
+    await expireCommands(db, drone, now);
+    const current = drone.activeReturn === record.id ? (await missionReturn(db, drone))?.record ?? record : record;
+    const [withTelemetry] = await attachLive(db, owner, [current], now);
+    return { status: 200, body: { record: withTelemetry, now } };
+  }
+  if (request.method !== 'PATCH') return { status: 405, body: { error: 'Method not allowed.' } };
+  const raw = await request.text(); if (raw.length > 1000) return { status: 413, body: { error: 'Request is too large.' } };
+  const { action } = liveActionSchema.parse(JSON.parse(raw));
+  const r = { ...record, live: { ...record.live!, telemetry: drone.telemetry } };
+  const step = customerAction(r, action);
+  const moved = await moveMission(db, drone, record, version, step.phase, { command: step.command ?? null, cancelled: step.cancelled }, now);
+  if (!moved) return { status: 409, body: { error: 'This return changed in another tab. Please try again.' } };
+  const [withTelemetry] = await attachLive(db, owner, [moved], now);
+  return { status: 200, body: { record: withTelemetry, now } };
+}
+
+const point = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]), pinRadius = z.number().min(0).max(LIMITS.maxPinRadius);
+const createSchema = z.object({ name: z.string().trim().min(1).max(40), transport: z.enum(['https', 'sms']), phone: z.string().regex(/^\+[1-9]\d{7,14}$/, 'Use an E.164 phone number like +15105550123.').optional(), home: point, pickupPad: point.nullable().default(null), dropPad: point.nullable().default(null), radius: z.number(), maxAlt: z.number(), cruiseAlt: z.number(), pinRadius: pinRadius.optional() });
+const patchSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('arm'), checklist: z.object({ pilot: z.literal(true), airspace: z.literal(true), pads: z.literal(true), failsafe: z.literal(true) }) }),
+  z.object({ action: z.literal('disarm') }),
+  z.object({ action: z.literal('config'), name: z.string().trim().min(1).max(40).optional(), home: point.optional(), pickupPad: point.nullable().optional(), dropPad: point.nullable().optional(), radius: z.number().optional(), maxAlt: z.number().optional(), cruiseAlt: z.number().optional(), pinRadius: pinRadius.optional() }),
+  z.object({ action: z.literal('pad-from-drone'), pad: z.enum(['home', 'pickupPad', 'dropPad']) }),
+  z.object({ action: z.literal('command'), type: z.enum(['PING', 'HOLD', 'LAND', 'RTL', 'ABORT']) }),
+  // pickup: what the operator saw in Fleet's preview; the server flies there only if it still computes the same.
+  z.object({ action: z.literal('dispatch'), returnId: z.string().uuid(), pickup: z.object({ source: z.enum(['pin', 'pad']), point }).optional() }),
+  z.object({ action: z.enum(['launch', 'unload', 'retry', 'land', 'divert-pad']) }),
+  z.object({ action: z.literal('abort') }),
+  z.object({ action: z.literal('rotate-key') }),
+]);
+const publicDrone = (d: Drone, now: number) => ({ id: d.id, name: d.name, transport: d.transport, phone: d.phone, phoneVerified: d.phoneVerified, config: d.config, armed: d.armedUntil > now, armedUntil: d.armedUntil, activeReturn: d.activeReturn, lastSeen: d.lastSeen, stale: isStale(d, now), telemetry: d.telemetry, createdAt: d.createdAt });
+const newDroneId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+
+/** Owner-scoped Fleet console API. */
+export async function handleFleet(request: Request, id?: string): Promise<Response> {
   let identity: Awaited<ReturnType<typeof session>>;
-  try { identity = await session(request); } catch { return Response.json({ error: 'Your account session expired. Open Your account to sign in again.' }, { status: 401, headers: noStore }); }
-  const { owner, cookie } = identity, now = Date.now();
-  const reply = (value: unknown, status = 200) => Response.json(value, { status, headers: { ...noStore, ...(cookie ? { 'Set-Cookie': cookie } : {}) } });
+  try { identity = await session(request); } catch { return sessionFailure(request); }
+  const { owner, cookie } = identity;
+  const reply = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', ...(cookie ? { 'Set-Cookie': cookie } : {}) } });
+  const db = env.DB; if (!db) return reply({ error: 'Storage is unavailable.' }, 503);
+  const setup = { link: !!secret(), sms: !!twilio(), linkUrl: `${new URL(request.url).origin}/api/drone/link`, smsWebhook: `${new URL(request.url).origin}/api/drone/sms` };
   try {
     if (request.method !== 'GET') {
       const origin = request.headers.get('origin');
-      if (origin && origin !== new URL(request.url).origin) throw new HttpError(403, 'Request origin is not allowed.');
+      if (origin && origin !== new URL(request.url).origin) return reply({ error: 'Request origin is not allowed.' }, 403);
+      if (Number(request.headers.get('content-length') || 0) > 4000) return reply({ error: 'Request is too large.' }, 413);
     }
+    const now = Date.now();
     if (!id && request.method === 'GET') {
-      const rows = await db().prepare('SELECT * FROM drones WHERE owner = ?1 OR EXISTS (SELECT 1 FROM json_each(drones.pilots) WHERE value = ?1) ORDER BY created_at DESC LIMIT 20').bind(owner).all<Row>();
-      if (new URL(request.url).searchParams.get('view') === 'jobs') {
-        // Lightweight feed for the tracking page: live deliveries on drones this account can see.
-        const jobs = await Promise.all(rows.results.map(async r => { const j = await latestJob(r.id, now); return j ? { droneId: r.id, droneName: r.name, online: isOnline(r.last_seen, now), job: JSON.parse(j.record) as DeliveryJob } : null; }));
-        return reply({ jobs: jobs.filter(Boolean), now });
-      }
-      return reply({ drones: await Promise.all(rows.results.map(r => view(r, owner, now))), now, sms: !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM) });
+      const rows = await db.prepare('SELECT * FROM drones WHERE owner = ? ORDER BY created_at').bind(owner).all<DroneRow>();
+      return reply({ setup, limits: LIMITS, drones: rows.results.map(r => publicDrone(toDrone(r), now)), now });
     }
     if (!id && request.method === 'POST') {
-      const { name } = parse(raw, z.object({ name: z.string().trim().min(1).max(40) }));
-      const count = await db().prepare('SELECT COUNT(*) AS n FROM drones WHERE owner = ?').bind(owner).first<{ n: number }>();
-      if ((count?.n || 0) >= 10) throw new HttpError(429, 'You can link up to 10 drones.');
-      const droneId = crypto.randomUUID(), secret = randomHex(32);
-      await db().prepare('INSERT INTO drones (id, owner, name, token_hash, created_at) VALUES (?, ?, ?, ?, ?)').bind(droneId, owner, name, await sha256Hex(secret), now).run();
-      return reply({ drone: await view((await load(droneId))!, owner, now), token: formatToken(droneId, secret) }, 201);
+      if (!secret()) return reply({ error: 'Set the DRONE_LINK_SECRET Worker secret before registering drones.' }, 503);
+      const input = createSchema.parse(JSON.parse(await request.text()));
+      if (input.transport === 'sms' && !input.phone) return reply({ error: 'SMS drones need the phone number of their SIM.' }, 400);
+      const config: DroneConfig = { home: input.home as Point, pickupPad: input.pickupPad as Point | null, dropPad: input.dropPad as Point | null, radius: input.radius, maxAlt: input.maxAlt, cruiseAlt: input.cruiseAlt, pinRadius: input.pinRadius ?? 0 };
+      const problem = configProblem(config); if (problem) return reply({ error: problem }, 400);
+      const count = await db.prepare('SELECT COUNT(*) AS n FROM drones WHERE owner = ?').bind(owner).first<{ n: number }>();
+      if ((count?.n || 0) >= LIMITS.maxDrones) return reply({ error: `You can register up to ${LIMITS.maxDrones} drones.` }, 429);
+      const droneId = newDroneId();
+      try { await db.prepare('INSERT INTO drones (id, owner, name, transport, phone, config, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(droneId, owner, input.name, input.transport, input.transport === 'sms' ? input.phone! : null, JSON.stringify(config), now).run(); }
+      catch (error) { if (/UNIQUE/i.test(String(error))) return reply({ error: 'That phone number is already registered to a drone.' }, 409); throw error; }
+      const drone = (await loadDrone(db, droneId))!;
+      return reply({ drone: publicDrone(drone, now), key: await keyFor(drone), setup }, 201);
     }
-    if (id === 'join' && request.method === 'POST') {
-      const { code } = parse(raw, z.object({ code: z.string().trim().toUpperCase().regex(/^[A-Z2-9]{6}$/, 'Pilot codes are 6 letters and numbers.') }));
-      const row = await db().prepare('SELECT * FROM drones WHERE pilot_code = ?').bind(code).first<Row>();
-      if (!row) throw new HttpError(404, 'That pilot code did not match a drone. Ask the owner for a fresh one.');
-      const pilots = pilotsOf(row);
-      if (row.owner !== owner && !pilots.includes(owner)) {
-        if (pilots.length >= 20) throw new HttpError(429, 'This drone already has 20 pilots.');
-        await db().prepare('UPDATE drones SET pilots = ? WHERE id = ?').bind(JSON.stringify([...pilots, owner]), row.id).run();
+    if (!id) return reply({ error: 'Not found.' }, 404);
+    let drone = await loadDrone(db, id);
+    if (!drone || drone.owner !== owner) return reply({ error: 'This drone is not in your fleet.' }, 404);
+    if (request.method === 'DELETE') {
+      if (drone.activeReturn) return reply({ error: 'End the live flight before removing this drone.' }, 409);
+      if (airborne(drone.telemetry)) return reply({ error: 'Land the drone before removing it; ABORT stops working once it is removed.' }, 409);
+      await db.batch([db.prepare('DELETE FROM drone_commands WHERE drone_id = ?').bind(id), db.prepare('DELETE FROM drone_telemetry WHERE drone_id = ?').bind(id), db.prepare('DELETE FROM drones WHERE id = ? AND owner = ?').bind(id, owner)]);
+      removeDrone(id);
+      return reply({ deleted: true });
+    }
+    let key: string | undefined;
+    if (request.method === 'PATCH') {
+      const input = patchSchema.parse(JSON.parse(await request.text()));
+      const mission = drone.activeReturn ? await missionReturn(db, drone) : null;
+      const needsLink = () => { if (!secret()) throw new Error('Set the DRONE_LINK_SECRET Worker secret first.'); };
+      if (input.action === 'arm') await db.prepare('UPDATE drones SET armed_until = ? WHERE id = ?').bind(now + ARM_WINDOW_MS, id).run();
+      else if (input.action === 'disarm') await db.prepare('UPDATE drones SET armed_until = 0 WHERE id = ?').bind(id).run();
+      else if (input.action === 'config' || input.action === 'pad-from-drone') {
+        if (mission) throw new Error('Pads and limits are locked during a live flight.');
+        let config: DroneConfig, name = drone.name;
+        if (input.action === 'pad-from-drone') {
+          if (!drone.telemetry || isStale(drone, now)) throw new Error('Waiting for fresh telemetry from the bridge.');
+          config = { ...drone.config, [input.pad]: [drone.telemetry.lon, drone.telemetry.lat] };
+        } else { config = { ...drone.config, ...Object.fromEntries(Object.entries(input).filter(([k, v]) => k !== 'action' && k !== 'name' && v !== undefined)) } as DroneConfig; name = input.name ?? name; }
+        const problem = configProblem(config); if (problem) throw new Error(problem);
+        // Changing limits disarms the drone so the checklist is confirmed against the new pads.
+        await db.prepare('UPDATE drones SET name = ?, config = ?, armed_until = 0 WHERE id = ?').bind(name, JSON.stringify(config), id).run();
+      } else if (input.action === 'command' || input.action === 'abort') {
+        needsLink();
+        const type = input.action === 'abort' ? 'ABORT' : input.type, live = mission?.record.live && !ENDED.includes(mission.record.live.phase) ? mission.record.live : null;
+        if (type !== 'ABORT' && await recentCommands(db, drone.id, now) >= COMMANDS_PER_MINUTE) return reply({ error: 'Too many commands this minute. ABORT still works.' }, 429);
+        if (type === 'HOLD' && live && !GROUND_PHASES.includes(live.phase)) {
+          // An airborne HOLD pauses the mission until the operator retries the step or aborts.
+          await stepMission(db, drone, r => ({ phase: r.live!.phase, fault: 'OPERATOR_HOLD', command: { type, args: [] } }), now);
+        } else {
+          // ABORT, LAND and RTL go straight to the queue so they reach the drone even if the mission record is contended.
+          await enqueue(db, drone, { type, args: [] }, now);
+          if (live && (type === 'ABORT' || type === 'LAND' || type === 'RTL')) await stepMission(db, drone, () => ({ phase: 'ABORTED', command: null }), now).catch(() => null);
+        }
+      } else if (input.action === 'dispatch') {
+        needsLink();
+        const row = await db.prepare('SELECT record, version FROM returns WHERE id = ? AND owner = ?').bind(input.returnId, owner).first<{ record: string; version: number }>();
+        if (!row) throw new Error('Choose one of your own returns.');
+        const record = JSON.parse(row.record) as ReturnRecord, blockers = dispatchBlockers(drone, record, now);
+        if (blockers.length) return reply({ error: blockers.join(' '), blockers }, 400);
+        const changed = pickupMismatch(pickupFor(drone.config, record.package.pickup), input.pickup as { source: 'pin' | 'pad'; point: Point } | undefined);
+        if (changed) return reply({ error: changed }, 409);
+        const claimed = await db.prepare('UPDATE drones SET active_return = ? WHERE id = ? AND active_return IS NULL').bind(record.id, id).run();
+        if (claimed.meta.changes === 0) return reply({ error: 'The drone is already flying another return.' }, 409);
+        const release = () => db.prepare('UPDATE drones SET active_return = NULL WHERE id = ? AND active_return = ?').bind(id, record.id).run();
+        let moved: ReturnRecord | null;
+        try { moved = await moveMission(db, { ...drone, activeReturn: record.id }, startLive(record, drone, now), row.version, 'TAKEOFF_OUT', {}, now); }
+        catch (error) { await release(); throw error; }
+        if (!moved) { await release(); return reply({ error: 'That return changed at the same time. Please try again.' }, 409); }
+      } else if (input.action === 'rotate-key') {
+        needsLink(); if (mission) throw new Error('Rotate the key after the live flight ends.');
+        if (airborne(drone.telemetry)) throw new Error('Land the drone before rotating its key; the old key stops working immediately.');
+        // Queued lines are signed with the old key, which the bridge can no longer verify: retire them with it.
+        await db.batch([db.prepare('UPDATE drones SET key_version = key_version + 1, last_seq = 0 WHERE id = ?').bind(id), db.prepare("UPDATE drone_commands SET status = 'superseded', updated_at = ? WHERE drone_id = ? AND status IN ('pending', 'sent')").bind(now, id)]);
+        key = await keyFor((await loadDrone(db, id))!);
+      } else {
+        needsLink(); if (!mission?.record.live) throw new Error('This drone has no live flight.');
+        const action = input.action;
+        if (action !== 'retry' || phaseCommand(mission.record.live, mission.record.live.phase)) {
+          if (drone.armedUntil <= now) throw new Error('Arm live missions again with the pre-flight checklist.');
+          if (isStale(drone, now)) throw new Error('No fresh telemetry from the bridge.');
+        }
+        await stepMission(db, drone, r => operatorAction(r, action, drone!.config.pickupPad, drone!.telemetry), now);
       }
-      return reply({ drone: await view((await load(row.id))!, owner, now) });
+      drone = (await loadDrone(db, id))!;
+      publishDrone(db, drone, mission?.record.id);
     }
-    if (!id) throw new HttpError(404, 'Not found.');
-    let row = await access(id, owner);
-    const isOwner = row.owner === owner;
-    if (!action && request.method === 'GET') return reply({ drone: await view(row, owner, now), now });
-    if (!action && request.method === 'PATCH') {
-      if (!isOwner) throw new HttpError(403, 'Only the drone owner can change its settings.');
-      const s = parse(raw, droneSettingsSchema);
-      const t = telemetryOf(row);
-      const nextHome = s.home === 'current' ? (t && t.gpsFix >= 3 ? [t.lng, t.lat] : null) : s.home ?? home(row);
-      if (s.home === 'current' && !nextHome) throw new HttpError(400, 'The drone has no GPS fix yet, so its position cannot become home.');
-      await db().prepare('UPDATE drones SET name = ?, phone = ?, geofence_m = ?, max_alt_m = ?, home_lng = ?, home_lat = ? WHERE id = ?')
-        .bind(s.name ?? row.name, s.phone === undefined ? row.phone : s.phone || null, s.geofenceM ?? row.geofence_m, s.maxAltM ?? row.max_alt_m, nextHome?.[0] ?? null, nextHome?.[1] ?? null, id).run();
-      return reply({ drone: await view((await load(id))!, owner, now) });
-    }
-    if (!action && request.method === 'DELETE') {
-      if (isOwner) await db().batch(['drone_commands', 'drone_jobs', 'drone_events'].map(t => db().prepare(`DELETE FROM ${t} WHERE drone_id = ?`).bind(id)).concat(db().prepare('DELETE FROM drones WHERE id = ?').bind(id)));
-      else await db().prepare('UPDATE drones SET pilots = ? WHERE id = ?').bind(JSON.stringify(pilotsOf(row).filter(p => p !== owner)), id).run();
-      return reply({ removed: true });
-    }
-    if (request.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
-    if (action === 'commands') {
-      const req = parse(raw, commandRequestSchema);
-      const params = req.type === 'FLY_ROUTE' ? req.params : null;
-      if (params) { const refused = preflight({ home: home(row), geofenceM: row.geofence_m, maxAltM: row.max_alt_m, lastSeen: row.last_seen, telemetry: telemetryOf(row) }, params, now); if (refused) throw new HttpError(409, refused); }
-      else if (!isOnline(row.last_seen, now)) throw new HttpError(409, `The drone is offline, so ${req.type} cannot reach it over the internet. Use the SMS backup.`);
-      const commandId = await queue(row, owner, req.type, params, 'internet', now);
-      return reply({ commandId, drone: await view(row, owner, now) }, 201);
-    }
-    if (action === 'jobs') {
-      const job = await handleJobs(row, owner, raw, now);
-      return reply({ job, drone: await view((await load(row.id))!, owner, now) }, 201);
-    }
-    if (action === 'sms') {
-      const req = parse(raw, smsCommandSchema);
-      const args = req.command === 'GOTO' ? [req.point[1].toFixed(6), req.point[0].toFixed(6), String(req.altM)] : [];
-      const text = await smsText(row.token_hash, row.id, req.command, args, now);
-      const sent = row.phone ? await sendSms(row.phone, text) : false;
-      if (sent && req.command !== 'STATUS') await queue(row, owner, req.command === 'GOTO' ? 'FLY_ROUTE' : req.command, req.command === 'GOTO' ? { waypoints: [req.point], altM: req.altM, speedMs: 6, land: false, release: false } : null, 'sms', now);
-      return reply({ text, to: row.phone, sent, expiresInMinutes: 5 });
-    }
-    if (!isOwner) throw new HttpError(403, 'Only the drone owner can do that.');
-    if (action === 'share') {
-      const { revoke } = parse(raw, z.object({ revoke: z.boolean().default(false) }));
-      await db().prepare('UPDATE drones SET pilot_code = ?, pilots = ? WHERE id = ?').bind(revoke ? null : pilotCode(), revoke ? '[]' : row.pilots, id).run();
-      return reply({ drone: await view((await load(id))!, owner, now) });
-    }
-    if (action === 'token') {
-      const secret = randomHex(32);
-      await db().prepare('UPDATE drones SET token_hash = ? WHERE id = ?').bind(await sha256Hex(secret), id).run();
-      row = (await load(id))!;
-      return reply({ drone: await view(row, owner, now), token: formatToken(id, secret) });
-    }
-    throw new HttpError(404, 'Not found.');
-  } catch (error) { return failure(error, reply); }
-}
-
-/** Device endpoint: POST /api/drone/sync with `Authorization: Bearer aero_<id>.<secret>`. */
-export async function handleDroneSync(request: Request): Promise<Response> {
-  const reply = (value: unknown, status = 200) => Response.json(value, { status, headers: noStore });
-  try {
-    const raw = await request.text();
-    if (request.method !== 'POST') throw new HttpError(405, 'Use POST.');
-    const token = parseToken(request.headers.get('authorization'));
-    const row = token ? await load(token.droneId) : null;
-    if (!token || !row || !sameHex(await sha256Hex(token.secret), row.token_hash)) throw new HttpError(401, 'Unknown drone token. Copy a fresh token from the Fly page.');
-    const { telemetry, acks } = parse(raw, syncSchema, 16000);
-    const now = Date.now(), p: Point = [telemetry.lng, telemetry.lat], good = telemetry.gpsFix >= 3;
-    const trail = good ? appendTrail(JSON.parse(row.trail), p) : JSON.parse(row.trail);
-    const setHome = good && home(row) === null;
-    const previous = telemetryOf(row);
-    const statements = [
-      db().prepare('UPDATE drones SET last_seen = ?, telemetry = ?, trail = ?, home_lng = ?, home_lat = ? WHERE id = ?')
-        .bind(now, JSON.stringify(telemetry), JSON.stringify(trail), setHome ? p[0] : row.home_lng, setHome ? p[1] : row.home_lat, row.id),
-      db().prepare("UPDATE drone_commands SET status = 'expired', updated_at = ? WHERE drone_id = ? AND status = 'queued' AND expires_at <= ?").bind(now, row.id, now),
-      ...acks.map(a => db().prepare("UPDATE drone_commands SET status = ?, message = ?, updated_at = ? WHERE id = ? AND drone_id = ? AND status NOT IN ('done', 'failed', 'superseded')").bind(a.status, a.message ?? null, now, a.commandId, row.id)),
-      // Anything new the drone says (failsafes, takeover, arrival) becomes a status update.
-      ...(telemetry.message && telemetry.message !== previous?.message ? [logEvent(row.id, null, 'alert', telemetry.message, null, now)] : []),
-      ...(setHome ? [logEvent(row.id, null, 'alert', 'Home set from the first GPS fix', null, now)] : []),
-    ];
-    await db().batch(statements);
-    if (acks.length) await advanceJobs(row, acks, now);
-    const queued = await db().prepare("SELECT * FROM drone_commands WHERE drone_id = ? AND status = 'queued' AND expires_at > ?").bind(row.id, now).all<CommandRow>();
-    const next = nextCommand(queued.results.map(c => ({ ...c, createdAt: c.created_at, expiresAt: c.expires_at })), now);
-    if (next) await db().prepare("UPDATE drone_commands SET status = 'sent', updated_at = ? WHERE id = ? AND status = 'queued'").bind(now, next.id).run();
-    const config: DroneConfig = { droneId: row.id, name: row.name, home: setHome ? p : home(row), geofenceM: row.geofence_m, maxAltM: row.max_alt_m, minBatteryPct: MIN_BATTERY_PCT };
-    return reply({ command: next ? { id: next.id, type: next.type, params: next.params ? JSON.parse(next.params) : null, expiresAt: next.expires_at } : null, config, serverTime: now });
-  } catch (error) { return failure(error, reply); }
-}
-
-/** Move delivery jobs forward from the drone's acks, in the order the drone sent them, and queue the next leg. */
-async function advanceJobs(row: Row, acks: { commandId: string; status: 'accepted' | 'done' | 'failed'; message?: string }[], now: number) {
-  const placeholders = acks.map(() => '?').join(', ');
-  const linked = await db().prepare(`SELECT id, job_id, leg FROM drone_commands WHERE drone_id = ? AND job_id IS NOT NULL AND id IN (${placeholders})`).bind(row.id, ...acks.map(a => a.commandId)).all<{ id: string; job_id: string; leg: JobLeg }>();
-  const byId = new Map(linked.results.map(c => [c.id, c]));
-  const jobs = new Map<string, { before: DeliveryJob; after: DeliveryJob; issuedBy: string }>();
-  const queued: { job: DeliveryJob; leg: JobLeg; issuedBy: string }[] = [];
-  for (const a of acks) {
-    const c = byId.get(a.commandId); if (!c) continue;
-    let entry = jobs.get(c.job_id);
-    if (!entry) {
-      const jr = await db().prepare('SELECT record, issued_by FROM drone_jobs WHERE id = ?').bind(c.job_id).first<{ record: string; issued_by: string }>();
-      if (!jr) continue;
-      const j = JSON.parse(jr.record) as DeliveryJob; entry = { before: j, after: j, issuedBy: jr.issued_by }; jobs.set(c.job_id, entry);
-    }
-    const { job, next } = onAck(entry.after, c.leg, a.status, a.message, now);
-    entry.after = job;
-    if (next) queued.push({ job, leg: next, issuedBy: entry.issuedBy });
+    const [trail, commands] = await Promise.all([
+      db.prepare('SELECT data FROM drone_telemetry WHERE drone_id = ? ORDER BY seq DESC LIMIT 240').bind(id).all<{ data: string }>(),
+      db.prepare('SELECT seq, type, status, reason, phase, created_at, updated_at FROM drone_commands WHERE drone_id = ? ORDER BY seq DESC LIMIT 25').bind(id).all(),
+    ]);
+    const mission = drone.activeReturn ? await missionReturn(db, drone) : null;
+    return reply({ setup, drone: publicDrone(drone, now), ...(key ? { key } : {}), trail: trail.results.map(t => JSON.parse(t.data) as LiveTelemetry).reverse(), commands: commands.results, mission: mission?.record ?? null, now });
+  } catch (error) {
+    if (error instanceof z.ZodError) return reply({ error: fleetInputError(error.issues) }, 400);
+    if (error instanceof SyntaxError) return reply({ error: 'Invalid request.' }, 400);
+    if (error instanceof Error && !/D1|SQLITE|network/i.test(error.message)) return reply({ error: error.message }, 400);
+    console.error('AERO fleet operation failed', error);
+    return reply({ error: 'Could not reach fleet storage. Try again in a moment.' }, 503);
   }
-  const statements = [...jobs.values()].flatMap(({ before, after }) => after === before ? [] : [saveJob(after), ...jobEvents(before, after)]);
-  for (const q of queued) { const cmd = legCommand(q.job, q.leg); statements.push(...queueStatements(row, q.issuedBy, cmd.type, cmd.params, 'internet', now, { id: q.job.id, leg: q.leg }).statements); }
-  if (statements.length) await db().batch(statements);
-}
-
-function failure(error: unknown, reply: (value: unknown, status?: number) => Response) {
-  if (error instanceof HttpError) return reply({ error: error.message }, error.status);
-  if (error instanceof z.ZodError) return reply({ error: error.issues.map(i => `${i.path.join('.') || 'request'}: ${i.message}`).join(' · ') }, 400);
-  if (error instanceof SyntaxError) return reply({ error: 'Invalid request.' }, 400);
-  console.error('AERO drone operation failed', error);
-  return reply({ error: 'Could not reach drone storage. Retry in a moment.' }, 503);
 }
