@@ -12,7 +12,11 @@ export async function handle(request: Request, id?: string): Promise<Response> {
   let identity:Awaited<ReturnType<typeof session>>;
   try{identity=await session(request);}catch{return Response.json({error:'Your account session expired or is unavailable. Open Your account to sign in again.'},{status:401,headers:{'Cache-Control':'private, no-store'}});}
   const {owner,cookie}=identity;
-  const reply = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', ...(cookie ? { 'Set-Cookie': cookie } : {}) } });
+  // Drain an unread body before any early reply: answering without consuming it breaks the next request on a kept-alive connection.
+  const reply = async (value: unknown, status = 200) => {
+    if (request.method !== 'GET' && request.method !== 'HEAD' && !request.bodyUsed) await request.arrayBuffer().catch(() => undefined);
+    return Response.json(value, { status, headers: { 'Cache-Control': 'no-store', ...(cookie ? { 'Set-Cookie': cookie } : {}) } });
+  };
   try {
     const db = env.DB; if (!db) return reply({ error: 'Demo storage is unavailable. Please try again shortly.' }, 503);
     if (request.method !== 'GET') {
